@@ -1,0 +1,20 @@
+# ROS 2 build artifacts
+build/
+install/
+log/
+
+# Cloned dependencies (if using vcstool or manual clones)
+src/
+
+# OS and editor files
+.vscode/
+*.swp
+*~
+.DS_Store
+__pycache__/
+
+# ROS bag files (too large for git)
+bags/
+
+# ROSdeps
+rosdep.yaml
