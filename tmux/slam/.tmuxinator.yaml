@@ -1,0 +1,17 @@
+name: debug
+root: ~/masa_ws
+pre_window: ./container shell
+
+windows:
+  - velodyne:
+      layout: main-vertical
+      panes:
+        -
+        - ros2 run tf2_ros static_transform_publisher 0 0 0.5 0 0 0 body velodyne
+        - ros2 launch spot_driver spot_driver.launch.py config_file:=$HOME/masa_ws/params/spot_driver.yaml
+        - ros2 launch slam_toolbox online_async_launch.py slam_params_file:=$HOME/masa_ws/params/slam_toolbox_online.yaml
+        - sleep 3 && $HOME/masa_ws/record_tasks.sh
+        # - ros2 launch slam_toolbox online_async_launch.py slam_params_file:=$HOME/masa_ws/params/slam_toolbox_online.yaml use_sim_time:=false
+        - ros2 launch spot_velodyne velodyne.launch.py
+        - ros2 topic hz /scan
+        - ros2 launch foxglove_bridge foxglove_bridge_launch.xml
