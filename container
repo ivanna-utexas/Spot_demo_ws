@@ -100,22 +100,27 @@ if [[ ! -f $CONTAINER_NAME_FILE ]]; then
   echo $CONTAINER_NAME > $CONTAINER_NAME_FILE
 fi
 
-# Read SPOT_IP from config file or detect from wg0 interface on Jetson
+# Read SPOT_IP from config file
 SPOT_IP_FILE=$ROOT/config/spot_ip
 SPOT_IP=""
+
+# Detect ORIN_IP from wg0 interface on Jetson
+ORIN_IP=""
 if [ "$ISJETSON" -eq 1 ]; then
   # On Jetson, try to get IP from wg0 interface
   if command -v ip &> /dev/null && ip addr show wg0 &> /dev/null; then
-    SPOT_IP=$(ip -4 addr show wg0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
-    if [ -n "$SPOT_IP" ]; then
-      echo "SPOT_IP detected from wg0 interface: $SPOT_IP"
+    ORIN_IP=$(ip -4 addr show wg0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
+    if [ -n "$ORIN_IP" ]; then
+      echo "ORIN_IP detected from wg0 interface: $ORIN_IP"
     else
       echo "Warning: wg0 interface found but no IPv4 address detected."
     fi
   else
     echo "Warning: wg0 interface not found on Jetson."
   fi
-elif test -f "$SPOT_IP_FILE"; then
+fi
+
+if test -f "$SPOT_IP_FILE"; then
   SPOT_IP="$(cat $SPOT_IP_FILE)"
   echo "SPOT_IP loaded from $SPOT_IP_FILE: $SPOT_IP"
 else
@@ -299,6 +304,9 @@ dockerrun() {
   local env_flags="-e DISPLAY=$_DISPLAY -e IN_CONTAINER_NAME=$CONTAINER_NAME"
   if [ -n "$SPOT_IP" ]; then
     env_flags="$env_flags -e SPOT_IP=$SPOT_IP"
+  fi
+  if [ -n "$ORIN_IP" ]; then
+    env_flags="$env_flags -e ORIN_IP=$ORIN_IP"
   fi
   while true; do
     if docker run --rm \
