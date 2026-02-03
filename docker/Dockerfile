@@ -137,6 +137,7 @@ RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o 
 # Install Core ROS 2 Humble packages
 RUN apt-get update && apt-get install -y \
     ros-${ros_distro}-desktop-full \
+    ros-${ros_distro}-rmw-cyclonedds-cpp \
     ros-dev-tools \
     && rm -rf /var/lib/apt/lists/*
 
@@ -173,6 +174,10 @@ RUN if [ "$is_jetson" = "true" ]; then \
 else \
   echo "Skipping Realsense installation (Not on Jetson)"; \
 fi
+
+# Azure Kinect SDK
+COPY scripts/install_azure_kinect_sdk.sh /tmp/install_azure_kinect_sdk.sh
+RUN /tmp/install_azure_kinect_sdk.sh && rm /tmp/install_azure_kinect_sdk.sh
 
 # MPU6050 Dependencies
 RUN if [ "$is_jetson" = "true" ]; then \
@@ -253,6 +258,21 @@ RUN apt-get update && apt-get install -y \
   gstreamer1.0-tools \
   gstreamer1.0-x \
   && rm -rf /var/lib/apt/lists/*
+
+# Azure Kinect ROS Driver
+WORKDIR /opt/azure_kinect_ws
+RUN apt-get update && \
+    mkdir -p src && \
+    cd src && \
+    git clone -b humble https://github.com/microsoft/Azure_Kinect_ROS_Driver.git && \
+    cd .. && \
+    . /opt/ros/${ros_distro}/setup.sh && \
+    rosdep install --from-paths src --ignore-src -r -y && \
+    colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release && \
+    rm -rf /var/lib/apt/lists/*
+
+# Source Azure Kinect Driver in bashrc
+RUN echo "source /opt/azure_kinect_ws/install/setup.bash" >> /etc/bash.bashrc
 
 # EGL, OpenGL libraries (for GUI applications)
 RUN apt-get update && apt-get install -y \

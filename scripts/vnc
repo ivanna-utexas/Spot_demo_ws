@@ -78,9 +78,9 @@ echo "Starting TurboVNC server on :9 with resolution $RESOLUTION (no password)..
 
 # Display connection info based on platform
 if command -v nvpmodel &> /dev/null; then
-    # On Jetson, show SPOT_IP if available
-    if [ -n "$SPOT_IP" ]; then
-        echo "VNC Server started. Connect to $SPOT_IP:5909"
+    # On Jetson, show ORIN_IP if available
+    if [ -n "$ORIN_IP" ]; then
+        echo "VNC Server started. Connect to $ORIN_IP:5909"
     else
         echo "VNC Server started on :9 (port 5909)"
     fi

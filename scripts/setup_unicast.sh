@@ -1,13 +1,21 @@
 #!/bin/bash
 
-CONFIG_FILE_PATH=$(realpath $(dirname "$0")/..)/cyclonedds
+CONFIG_FILE_PATH="$HOME/nav_ws/config"
 
 # if the hostname is "spot" or "spot-orin" set the config to spot.xml and if the hostname is "spot-laptop" set the config to laptop.xml
 HOSTNAME=$(hostname)
-CONFIG_FILE_NAME="config.xml"
+if [[ "$HOSTNAME" == "spot" || "$HOSTNAME" == "spot-orin" ]]; then
+    CONFIG_FILE_NAME="cyclonedds_spot.xml"
+elif [[ "$HOSTNAME" == "spot-laptop" ]]; then
+    CONFIG_FILE_NAME="cyclonedds_laptop.xml"
+else
+    # Default fallback
+    CONFIG_FILE_NAME="cyclonedds.xml"
+    echo "Warning: Hostname '$HOSTNAME' not recognized as spot, spot-orin, or spot-laptop. Using default cyclonedds.xml."
+fi
 
 # The XML file that configures Cyclone DDS (stored in user's home directory)
-CONFIG_FILE_PATH="$HOME/masa_ws/cyclonedds"
+
 
 # Export the necessary ROS 2 and Cyclone DDS environment variables (idempotent)
 if grep -q "^export ROS_VERSION=" ~/.bashrc; then
@@ -31,7 +39,7 @@ if grep -q "^export RMW_IMPLEMENTATION=" ~/.bashrc; then
     sed -i 's|^export RMW_IMPLEMENTATION=.*|export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp|' ~/.bashrc
 else
     echo "Adding RMW_IMPLEMENTATION to ~/.bashrc"
-    echo "export RMW_IMPLEMENTATION=rmw_cyclonedx_cpp" >> ~/.bashrc
+    echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> ~/.bashrc
 fi
 
 if grep -q "^export CYCLONEDDS_URI=" ~/.bashrc; then

@@ -1,5 +1,5 @@
 name: debug
-root: ~/masa_ws
+root: ~/nav_ws
 pre_window: ./container shell
 
 windows:

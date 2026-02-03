@@ -5,12 +5,18 @@ ROS_DISTRO=humble
 # ROS2 Package Dependencies
 # =============================================================================
 apt-get update && apt-get install -y \
-  ros-$ROS_DISTRO-urg-node \
   ros-$ROS_DISTRO-diagnostic-updater \
-  ros-$ROS_DISTRO-nav-msgs \
-  ros-$ROS_DISTRO-foxglove-bridge \
-  ros-$ROS_DISTRO-rviz2 \
+  ros-$ROS_DISTRO-rmw-cyclonedds-cpp \
+  ros-$ROS_DISTRO-tf2-geometry-msgs \
+  ros-$ROS_DISTRO-tf2-sensor-msgs \
+  ros-$ROS_DISTRO-slam-toolbox \
+  ros-$ROS_DISTRO-urg-node\
+  ros-$ROS_DISTRO-nav2-costmap-2d \
+  ros-$ROS_DISTRO-nav2-bringup \
+  ros-$ROS_DISTRO-nav2-map-server \
+  ros-$ROS_DISTRO-nav2-navfn-planner \
+  ros-$ROS_DISTRO-navigation2 \
   ros-$ROS_DISTRO-velodyne \
-  ros-$ROS_DISTRO-velodyne-driver \
-  ros-$ROS_DISTRO-joint-state-publisher \
-  ros-$ROS_DISTRO-joint-state-publisher-gui
+  ros-$ROS_DISTRO-foxglove-bridge && \
+  apt -y upgrade && \
+  rm -rf /var/lib/apt/lists/*
