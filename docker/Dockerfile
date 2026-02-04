@@ -237,6 +237,9 @@ RUN python3 -m pip uninstall -y opencv-python opencv-contrib-python opencv-pytho
 
 # Additional ROS2 Packages (Localization, Transport)
 RUN apt-get update && apt-get install -y \
+    ros-${ros_distro}-controller-interface \
+    ros-${ros_distro}-forward-command-controller \
+    ros-${ros_distro}-imu-sensor-broadcaster \
     ros-${ros_distro}-robot-localization \
     ros-${ros_distro}-point-cloud-transport \
     ros-${ros_distro}-velodyne \
@@ -378,6 +381,7 @@ RUN apt-get update && apt-get install -y \
   libtbb-dev \
   libncurses5-dev \
   libpopt-dev \
+  libpcl-dev \
   cimg-dev \
   && rm -rf /var/lib/apt/lists/*
 

@@ -5,6 +5,7 @@ ROS_DISTRO=humble
 # ROS2 Package Dependencies
 # =============================================================================
 apt-get update && apt-get install -y \
+  ros-$ROS_DISTRO-bond-core \
   ros-$ROS_DISTRO-diagnostic-updater \
   ros-$ROS_DISTRO-rmw-cyclonedds-cpp \
   ros-$ROS_DISTRO-tf2-geometry-msgs \
