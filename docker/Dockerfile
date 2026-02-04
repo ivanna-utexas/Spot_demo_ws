@@ -239,6 +239,7 @@ RUN python3 -m pip uninstall -y opencv-python opencv-contrib-python opencv-pytho
 RUN apt-get update && apt-get install -y \
     ros-${ros_distro}-robot-localization \
     ros-${ros_distro}-point-cloud-transport \
+    ros-${ros_distro}-velodyne \
     ros-${ros_distro}-image-transport \
     ros-${ros_distro}-image-transport-plugins \
     && rm -rf /var/lib/apt/lists/*
@@ -268,7 +269,7 @@ RUN apt-get update && \
     cd .. && \
     . /opt/ros/${ros_distro}/setup.sh && \
     rosdep install --from-paths src --ignore-src -r -y && \
-    colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release && \
+    colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release && \
     rm -rf /var/lib/apt/lists/*
 
 # Source Azure Kinect Driver in bashrc
@@ -407,6 +408,8 @@ ARG is_jetson
 # Utils
 RUN apt-get update && apt-get install -y \
   vim \
+  tmux \
+  tmuxinator \
   && rm -rf /var/lib/apt/lists/*
 
 # Jetson-stats (ARM64 only, will fail gracefully on AMD64)
@@ -507,6 +510,10 @@ RUN set -e && \
     fi && \
     # Add user to i2c, dialout, and input groups
     usermod -aG i2c,dialout,input ${USERNAME}
+
+# Fix permissions for Azure Kinect workspace
+# This allows the non-root user to generate the URDF file at runtime
+RUN chown -R ${UID}:${GID} /opt/azure_kinect_ws
 
 # Copy bash_profile files from docker directory
 COPY docker/bash_profile.shared /tmp/
