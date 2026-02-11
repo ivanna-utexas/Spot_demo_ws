@@ -78,3 +78,9 @@ To verify connectivity:
     echo $LAPTOP_IP
     ```
 5.  Test ROS 2 communication (e.g., `ros2 topic list`).
+
+## HDL People Tracking
+
+To run it, simply run ```tmuxinator``` on /tmux/hdl_people_tracking/
+
+To properly visualize, in rviz2, switch the Fixed Frame under Global Options to "odom". Then, add "/detection_markers" and "human_points" by topic.
