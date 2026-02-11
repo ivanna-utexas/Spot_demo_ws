@@ -4,7 +4,7 @@ install/
 log/
 
 # Cloned dependencies (if using vcstool or manual clones)
-src/
+# src/
 
 # OS and editor files
 .vscode/
@@ -18,3 +18,15 @@ bags/
 
 # ROSdeps
 rosdep.yaml
+
+# Crashes and Debugging
+core.*
+*.pdf
+*.gv
+
+# Logs
+*.log
+*.txt
+
+# inner project code
+src/
