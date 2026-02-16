@@ -1,0 +1,10 @@
+name: eye_animation
+root: ~/nav_ws
+
+windows:
+  - eye_animation:
+      layout: main-vertical
+      panes:
+        - DISPLAY=:0 xrandr --output DP-1 --mode 1024x600 --primary 2>/dev/null || echo 'xrandr: DP-1 not found or already primary'
+        - ros2 launch azure_kinect_ros_driver driver.launch.py depth_mode:=NFOV_UNBINNED color_resolution:=720P fps:=30
+        - ros2 launch spot_eye_animation eye_animation.launch.py display:=:0
