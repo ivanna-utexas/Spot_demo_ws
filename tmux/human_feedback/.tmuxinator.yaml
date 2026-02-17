@@ -1,17 +1,19 @@
 name: subjective_feedback
 root: ~/nav_ws
 
+pre_window: source /opt/ros/humble/setup.bash && source ~/nav_ws/install/setup.bash
+
 windows:
-  - simulator:
+  - human_feedback_app:
       layout: main-vertical
       panes:
-        - 
+        - # Main terminal
+        - ros2 launch ironback_description description.launch.py
         - ros2 launch azure_kinect_ros_driver driver.launch.py depth_mode:=NFOV_UNBINNED color_resolution:=720P fps:=30
-        - ros2 launch av_navigation navigation.launch.py map:=<%= ENV['MAP'] || 'ahg_2' %>
-        - ros2 launch spot_driver spot_driver.launch.py
-        - ros2 launch velodyne_pointcloud VLP16_points.launch.py
         - ros2 launch hdl_people_tracking hdl_people_tracking.launch.py
+        - ros2 launch spot_velodyne velodyne.launch.py device_ip:=192.168.50.201
+        - ros2 launch spot_nav navigation.launch.py spot_config_file:=/home/ros/nav_ws/params/spot_driver.yaml map:=ahg_home_Feb12
         - ros2 launch rosbridge_server rosbridge_websocket_launch.xml
-        - ros2 launch human_feedback_app webapp.launch.py
+        - cd ~/nav_ws/src/human_feedback_app && ./restart_backend.sh && tail -f /tmp/survey_app.log
         - vnc
         - sleep 10; DISPLAY=:9 rviz2 -d rviz2/navstack.rviz

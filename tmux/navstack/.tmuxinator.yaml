@@ -14,5 +14,6 @@ windows:
         - ros2 run joy joy_node
         - ros2 run spot_joy teleop_node --ros-args -p verbose:=true
         - vnc
+        - ros2 launch spot_eye_animation eye_animation.launch.py 
         - sleep 10; DISPLAY=:9 rviz2 -d rviz2/navstack.rviz
         # - ros2 topic echo /joy --field axes

@@ -555,7 +555,8 @@ RUN --mount=type=cache,target=/tmp/pip-cache,mode=0777 PIP_CACHE_DIR=/tmp/pip-ca
     onnx \
     onnxruntime \
     flask \
-    tensorboard
+    tensorboard \
+    pygame
 
 # =============================================================================
 # Setup Unicast
