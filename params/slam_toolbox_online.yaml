@@ -1,0 +1,60 @@
+slam_toolbox:
+  ros__parameters:
+    # ROS time settings
+    use_sim_time: false
+
+    # Frame configuration for Spot robot (Spot uses 'body' not 'base_link')
+    base_frame: body  
+    odom_frame: odom
+    map_frame: map
+
+    # Odometry settings
+    provide_odom_frame: false
+    use_odometry: true
+
+    # Scan topic
+    scan_topic: /scan
+
+    # Scan queue settings (very important for message filter)
+    scan_queue_size: 10
+
+    # Scan matching parameters
+    use_scan_matching: true
+    use_scan_barycenter: true
+
+    # Transform tolerance for timing issues with Velodyne (increased tolerance for timestamp mismatches)
+    transform_timeout: 2.0  
+    # Keep more TF history to accommodate delays
+    tf_buffer_duration: 60.0 
+
+    # Publish tf at 50 Hz
+    transform_publish_period: 0.02  
+    # VERY imporant: Restamp TF to current time to fix timestamp issues
+    restamp_tf: true  
+
+    # Publishing rates
+    # Publish map at 1 Hz instead of default 10 seconds (might need to change in the future)
+    occupancy_grid_publish_period: 1.0 
+
+    # Scan buffer settings to handle Velodyne data
+    scan_buffer_size: 30
+    scan_buffer_maximum_scan_distance: 20.0
+
+    # Movement thresholds for map updates (Reduced for more frequent updates)
+    minimum_travel_distance: 0.1  
+    minimum_travel_heading: 0.1  
+
+    # SLAM algorithm parameters
+    resolution: 0.05
+    max_laser_range: 20.0
+    minimum_time_interval: 0.1  # Process scans every 100ms instead of 500ms or more
+
+    # Map update parameters
+    map_update_interval: 1.0  # Update map every 1 second
+    throttle_scans: 1  # Process every scan instead of throttling
+
+    # Loop closure
+    do_loop_closing: true
+    loop_match_minimum_chain_size: 10
+    loop_match_maximum_variance_coarse: 3.0
+    loop_match_minimum_response_coarse: 0.35

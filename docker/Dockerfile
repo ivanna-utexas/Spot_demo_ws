@@ -191,6 +191,17 @@ fi
 # =============================================================================
 FROM hardware-deps AS app-deps
 
+# Audio capture dependencies (for spot_audio: Azure Kinect mic array)
+# RUN apt-get update && apt-get install -y \
+#     libportaudio2 \
+#     alsa-utils \
+#     && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y \
+    libportaudio2 \
+    portaudio19-dev \
+    alsa-utils \
+    && rm -rf /var/lib/apt/lists/*
+
 
 # =============================================================================
 # VectorNav VN-100/200/300 ROS 2 driver (build from source)
@@ -331,6 +342,9 @@ RUN apt-get update && apt-get install -y \
   libgfortran5 \
   && rm -rf /var/lib/apt/lists/*
 #RUN python3 -m ensurepip --default-pip && python3 -m pip install --upgrade pip
+
+RUN pip3 install --no-cache-dir sounddevice==0.5.1
+
 
 # pytorch (using CUDA 12.6 compatible version)
 ARG install_cuda
@@ -513,7 +527,7 @@ RUN set -e && \
         groupadd -r input; \
     fi && \
     # Add user to i2c, dialout, and input groups
-    usermod -aG i2c,dialout,input ${USERNAME}
+    usermod -aG i2c,dialout,input,audio ${USERNAME}
 
 # Fix permissions for Azure Kinect workspace
 # This allows the non-root user to generate the URDF file at runtime
@@ -556,7 +570,20 @@ RUN --mount=type=cache,target=/tmp/pip-cache,mode=0777 PIP_CACHE_DIR=/tmp/pip-ca
     onnxruntime \
     flask \
     tensorboard \
-    pygame
+    pygame \
+    soxr==0.5.0 \
+    faster-whisper==1.1.0 \
+    ctranslate2==4.5.0
+
+# Pre-download Whisper + Silero VAD models (no runtime network dependency)
+# Note: torch.hub.load for silero-vad requires torchaudio (not available on Jetson),
+# so we download the repo zip and copy the JIT file directly.
+RUN mkdir -p /opt/spot_audio_models && \
+    python3 -c "from faster_whisper import WhisperModel; WhisperModel('base', download_root='/opt/spot_audio_models/whisper-base', device='cpu', compute_type='int8')" && \
+    python3 -c "import urllib.request, zipfile, shutil, os; urllib.request.urlretrieve('https://github.com/snakers4/silero-vad/archive/refs/tags/v5.1.zip', '/tmp/silero_vad.zip'); z = zipfile.ZipFile('/tmp/silero_vad.zip'); jit = [f for f in z.namelist() if f.endswith('silero_vad.jit')][0]; z.extract(jit, '/tmp/silero_extract'); shutil.copy2(os.path.join('/tmp/silero_extract', jit), '/opt/spot_audio_models/silero_vad.jit'); z.close()" && \
+    ls -la /opt/spot_audio_models/whisper-base/ && \
+    test -f /opt/spot_audio_models/silero_vad.jit && \
+    echo "Model provisioning OK"
 
 # =============================================================================
 # Setup Unicast

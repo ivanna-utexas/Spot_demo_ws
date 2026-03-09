@@ -1,0 +1,8 @@
+name: navstack
+root: ~/nav_ws
+
+windows:
+  - simulator:
+      layout: main-vertical
+      panes:
+        - cd src/vlm_policy && python -m pytest test/ -v --tb=short

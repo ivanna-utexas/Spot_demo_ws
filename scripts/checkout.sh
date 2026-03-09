@@ -1,7 +1,7 @@
 #!/bin/bash
 
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-PROJECT_ROOT="$(fullpath "$THIS_DIR/..")"
+PROJECT_ROOT="$(realpath "$THIS_DIR/..")"
 SRC_DIR="$PROJECT_ROOT/src"
 
 cd $SRC_DIR
@@ -19,7 +19,7 @@ function clone_or_pull {
         cd "$SRC_DIR"
     else
         echo "Cloning $REPO_URL into $REPO_DIR"
-        git clone -b "$REPO_BRANCH" "$REPO_URL" "$REPO_DIR"
+        git clone -b "$REPO_BRANCH" "$REPO_URL" "$SRC_DIR/$REPO_DIR"
     fi
 }
 
@@ -29,3 +29,5 @@ clone_or_pull master git@github.com:ut-amrl/ironback_description.git ironback_de
 clone_or_pull master git@github.com:ut-amrl/spot_nav.git spot_nav
 clone_or_pull main https://github.com/bdaiinstitute/spot_ros2.git spot_ros2
 clone_or_pull master git@github.com:ut-amrl/spot_velodyne.git spot_velodyne
+clone_or_pull ros2 git@github.com:ut-amrl/SuperOdom.git SuperOdom
+clone_or_pull master git@github.com:ut-amrl/arduino_multicolored_lightswitch.git arduino_multicolored_lightswitch
