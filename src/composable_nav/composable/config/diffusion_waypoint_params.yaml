@@ -1,0 +1,30 @@
+prefnav_diffusion_waypoint_node:
+  ros__parameters:
+    prefnav_config_name: exps/robot_exp/deploy
+    scenario_file: ""
+    device: cuda
+    compile: false
+
+    odom_topic: odom
+    tracks_topic: tracks
+    ped_actions_topic: social_nav/ped_actions
+
+    waypoints_topic: prefnav/diffusion_waypoints
+    legacy_diffusion_path_topic: prefnav/diffusion_path
+    markers_topic: prefnav/diffusion_waypoint_markers
+    output_frame_id: odom
+
+    action_timeout_sec: 2.0
+    max_past_odom_samples: 250
+    default_human_radius: 0.5
+    overtake_model_key: overtake_right
+
+    # Fill these in before launching. If left empty, startup will fail with a
+    # clear missing-checkpoint error instead of using the old hard-coded paths.
+    pretrain_dynamic_checkpoint: ""
+    pretrain_static_checkpoint: ""
+    follow_checkpoint: ""
+    overtake_left_checkpoint: ""
+    overtake_right_checkpoint: ""
+    yield_checkpoint: ""
+    prefer_region_checkpoint: ""
