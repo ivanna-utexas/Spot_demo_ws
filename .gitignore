@@ -3,9 +3,6 @@ build/
 install/
 log/
 
-# Cloned dependencies (if using vcstool or manual clones)
-# src/
-
 # OS and editor files
 .vscode/
 *.swp
@@ -15,6 +12,11 @@ __pycache__/
 
 # ROS bag files (too large for git)
 bags/
+rosbag2*/
+*.db3
+*.mcap
+*.bag
+camera_lidar_calib_data/
 
 # ROSdeps
 rosdep.yaml
@@ -28,5 +30,40 @@ core.*
 *.log
 *.txt
 
+# Data
+data/
+
 # inner project code
-src/
+#src/
+
+# Map artifacts (binary, large)
+maps/
+!maps/.gitkeep
+
+# External source clones — managed via repos/*.repos, not committed directly
+# (each has its own .git inside)
+src/LI_ORF/
+src/LiDAR_IMU_Init/
+src/SuperOdom/
+src/lio_sam/
+src/livox_ros_driver2/
+src/spot_ros2/
+src/human_feedback_app/
+src/hdl_people_tracking/
+src/ros2_tracing/
+src/tracetools_analysis/
+src/bond_core/
+src/composable_nav/PrefNav/
+src/arduino_multicolored_lightswitch/
+src/av_recorder/
+src/ironback_description/
+src/spot_velodyne/
+src/spot_nav/
+src/vlm_policy/
+src/tl_expected/
+src/vendor/
+
+# Qwen3 runtime and virtual environment
+.qwen3_runtime/
+.qwen3_vl_venv/
+.codex
