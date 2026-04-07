@@ -1,0 +1,38 @@
+# Canonical backend calibration for the fresh LIO-SAM path.
+#
+# Replace these values with the calibrated VN-100 / VLP-16 mount geometry when
+# the real measurements are available. The launch wrappers consume this file as
+# the backend-local source of truth for transforms and lidar/IMU skew.
+
+body_to_imu:
+  x: 0.0
+  y: 0.0
+  z: 0.0
+  roll: 0.0
+  pitch: 0.0
+  yaw: 0.0
+
+body_to_lidar:
+  x: 0.4064
+  y: 0.03
+  z: -0.17
+  roll: 0.0
+  pitch: 0.0
+  yaw: -1.5708
+
+lidar_imu_time_offset: 0.0
+
+imu_noise:
+  acc_n: 0.01
+  gyr_n: 0.005
+  acc_w: 0.0002
+  gyr_w: 0.00003
+
+gravity: 9.81
+
+frames:
+  map: map
+  odom: odom
+  base_link: base_link
+  imu_link: imu_link
+  lidar: velodyne

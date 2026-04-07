@@ -1,0 +1,18 @@
+# =============================================================================
+# VectorNav VN-100 driver defaults for the mapping stack
+# =============================================================================
+# These settings are intentionally conservative and are expected to be
+# overridden per system via launch arguments when needed.
+
+/**:
+  ros__parameters:
+    serial_port: "/dev/ttyUSB0"
+    serial_baud: 115200
+    async_output_type: 0
+    async_output_rate: 200
+    binary_data_output_port: 2
+    binary_gps_data_output_rate: 1
+    binary_ins_data_output_rate: 50
+    binary_imu_data_output_rate: 200
+    imu/frame_id: "imu_link"
+    gps/frame_id: "gps_link"

@@ -1,0 +1,92 @@
+# =============================================================================
+# LiORF configuration for Spot + VLP-16
+# =============================================================================
+# This file contains liorf-specific tuning parameters.
+# Body-to-lidar extrinsics are loaded from config/mapping/extrinsics.yaml
+# and injected by the launch file — they are NOT hardcoded here.
+#
+# IMU mode: six_axis (default until orientation is explicitly characterized)
+# GPS: disabled (no live GPS/GNSS topic path in v1)
+# =============================================================================
+
+/**:
+  ros__parameters:
+    # --- Topics ---
+    pointCloudTopic: "/velodyne_points"
+    imuTopic: "/mapping/imu"          # from spot_imu_adapter_node
+    odomTopic: "odometry/imu"         # liorf internal odometry
+    gpsTopic: "odometry/gpsz"         # disabled in v1
+
+    # --- Frames ---
+    lidarFrame: "velodyne"
+    baselinkFrame: "base_link"
+    odometryFrame: "odom"
+    mapFrame: "map"
+
+    # --- GPS ---
+    useImuHeadingInitialization: false
+    useGpsElevation: false
+    gpsCovThreshold: 2.0
+    poseCovThreshold: 25.0
+
+    # --- Save PCD ---
+    savePCD: true
+    savePCDDirectory: "/nav_ws/maps/liorf/raw/"
+
+    # --- Lidar Settings (VLP-16) ---
+    sensor: velodyne           # velodyne, ouster, livox, robosense
+    N_SCAN: 16                 # number of lidar scan lines
+    Horizon_SCAN: 1800         # lidar horizontal resolution
+    downsampleRate: 1          # default: 1; >1 for higher-res lidars
+    point_filter_num: 3        # filter every Nth point for mapping
+    lidarMinRange: 1.0         # minimum useful range [m]
+    lidarMaxRange: 100.0       # maximum useful range [m]
+
+    # --- IMU Settings ---
+    # 9-axis: uses orientation from IMU
+    # 6-axis: integrates gyro for orientation (default for Spot)
+    imuType: 0                 # 0 = 6-axis, 1 = 9-axis
+    imuRate: 200.0             # Spot IMU rate [Hz]
+    imuAccNoise: 0.01          # overridden by launch from extrinsics.yaml
+    imuGyrNoise: 0.005         # overridden by launch from extrinsics.yaml
+    imuAccBiasN: 0.0002        # overridden by launch from extrinsics.yaml
+    imuGyrBiasN: 0.00003       # overridden by launch from extrinsics.yaml
+    imuGravity: 9.81           # overridden by launch from extrinsics.yaml
+
+    # --- Extrinsics (PLACEHOLDER — overridden by launch file) ---
+    # These values are injected from config/mapping/extrinsics.yaml.
+    # Do NOT edit these directly.
+    extrinsicTrans: [0.0, 0.0, 0.5]
+    extrinsicRot: [1.0, 0.0, 0.0,
+                   0.0, 1.0, 0.0,
+                   0.0, 0.0, 1.0]
+
+    # --- LOAM Feature Extraction ---
+    edgeThreshold: 1.0
+    surfThreshold: 0.1
+    edgeFeatureMinValidNum: 10
+    surfFeatureMinValidNum: 100
+
+    # --- Scan Registration ---
+    numberOfCores: 4
+    mappingProcessInterval: 0.15     # [s] between mapping updates
+
+    # --- Surrounding Map ---
+    surroundingkeyframeAddingDistThreshold: 1.0    # [m]
+    surroundingkeyframeAddingAngleThreshold: 0.2   # [rad]
+    surroundingKeyframeDensity: 2.0                # [m]
+    surroundingKeyframeSearchRadius: 50.0          # [m]
+
+    # --- Loop Closure ---
+    loopClosureEnableFlag: true
+    loopClosureFrequency: 1.0          # [Hz]
+    surroundingKeyframeSize: 50
+    historyKeyframeSearchRadius: 15.0  # [m]
+    historyKeyframeSearchTimeDiff: 30.0 # [s]
+    historyKeyframeSearchNum: 25
+    historyKeyframeFitnessScore: 0.3
+
+    # --- Global Map Visualization ---
+    globalMapVisualizationSearchRadius: 1000.0  # [m]
+    globalMapVisualizationPoseDensity: 10.0
+    globalMapVisualizationLeafSize: 1.0         # [m] voxel downsample

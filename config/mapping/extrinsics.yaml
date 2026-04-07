@@ -1,0 +1,78 @@
+# =============================================================================
+# Canonical Mapping Calibration: VN-100 + VLP-16
+# =============================================================================
+# This file is the single source of truth for frame naming, static extrinsics,
+# IMU noise/covariances, and the lidar-to-IMU time offset used by mapping
+# backends in this workspace.
+#
+# The current numeric values are placeholders until the calibrated VN-100/VLP-16
+# measurements are dropped in. Existing Spot/LiORF flows still read the legacy
+# body_* keys below, so those aliases are kept intentionally.
+
+frames:
+  map: map
+  odom: odom
+  base: base_link
+  imu: imu_link
+  lidar: velodyne
+  nav_compat_base: flat_body
+
+# --- Canonical transforms ---
+# Translation and rotation are expressed as parent -> child.
+# z = 0.336 == 33.6cm higher than the center of the Spot body frame, based on manual measurement of the VLP-16 mount
+base_to_lidar:
+  x: 0.0
+  y: 0.0
+  z: 0.336 
+  roll: 0.0
+  pitch: 0.0
+  yaw: 0.0
+
+base_to_imu:
+  x: 0.21
+  y: 0.0
+  z: 0.20
+  roll: 0.0
+  pitch: 0.0
+  yaw: 0.0
+
+# --- Legacy aliases for existing Spot-specific bringup ---
+body_to_lidar:
+  x: 0.0
+  y: 0.0
+  z: 0.336 
+  roll: 0.0
+  pitch: 0.0
+  yaw: 0.0
+
+body_to_imu:
+  x: 0.21
+  y: 0.0
+  z: 0.20
+  roll: 0.0
+  pitch: 0.0
+  yaw: 0.0
+
+# --- IMU noise parameters ---
+imu_noise:
+  acc_n: 0.01
+  gyr_n: 0.005
+  acc_w: 0.0002
+  gyr_w: 0.00003
+
+# --- IMU covariances used by the normalization node ---
+imu_covariance:
+  orientation: [0.02, 0.02, 0.04]
+  angular_velocity: [0.000025, 0.000025, 0.000025]
+  linear_acceleration: [0.0001, 0.0001, 0.0001]
+
+# Positive means the IMU leads the lidar. The IMU normalizer subtracts this
+# value from IMU timestamps before publishing /mapping/imu.
+time_offset_lidar_imu: 0.0
+
+gravity: 9.81
+
+calibration:
+  method: "manual_mount_measurement"
+  date: "2026-03-31"
+  notes: "Replace placeholder values with the measured VN-100/VLP-16 extrinsics and initial software time offset before live qualification."

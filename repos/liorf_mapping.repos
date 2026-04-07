@@ -1,0 +1,8 @@
+repositories:
+  LI_ORF:
+    type: git
+    url: https://github.com/YJZLuckyBoy/liorf.git
+    # Pin to a known-good commit on the main/ros2 branch.
+    # Before tuning, inspect this revision and record the actual loop-closure
+    # backend (SC, RING, FALS, or ISC) in README_spot_liorf_mapping.md.
+    version: da22fa07be620ff875e2e2af479f66905baa199f

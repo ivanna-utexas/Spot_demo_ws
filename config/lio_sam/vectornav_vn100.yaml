@@ -1,0 +1,69 @@
+vectornav:
+  ros__parameters:
+    port: "/dev/ttyUSB0"
+    baud: 921600
+    adjust_ros_timestamp: true
+    reconnect_ms: 500
+    AsyncDataOutputType: 0
+    AsyncDataOutputFrequency: 1
+    syncInMode: 3
+    syncInEdge: 0
+    syncInSkipFactor: 0
+    syncOutMode: 0
+    syncOutPolarity: 0
+    syncOutSkipFactor: 0
+    syncOutPulseWidth_ns: 100000000
+    serialCount: 0
+    serialStatus: 0
+    spiCount: 0
+    spiStatus: 0
+    serialChecksum: 1
+    spiChecksum: 0
+    errorMode: 1
+    BO1:
+      asyncMode: 1
+      rateDivisor: 1
+      commonField: 0x131
+      timeField: 0x0000
+      imuField: 0x0000
+      gpsField: 0x0000
+      attitudeField: 0x0000
+      insField: 0x0000
+      gps2Field: 0x0000
+    BO2:
+      asyncMode: 0
+      rateDivisor: 0
+      commonField: 0x0000
+      timeField: 0x0000
+      imuField: 0x0000
+      gpsField: 0x0000
+      attitudeField: 0x0000
+      insField: 0x0000
+      gps2Field: 0x0000
+    BO3:
+      asyncMode: 0
+      rateDivisor: 0
+      commonField: 0x0000
+      timeField: 0x0000
+      imuField: 0x0000
+      gpsField: 0x0000
+      attitudeField: 0x0000
+      insField: 0x0000
+      gps2Field: 0x0000
+    frame_id: "imu_link"
+
+vn_sensor_msgs:
+  ros__parameters:
+    use_enu: true
+    orientation_covariance: [0.02, 0.0, 0.0,
+                              0.0, 0.02, 0.0,
+                              0.0, 0.0, 0.04]
+    angular_velocity_covariance: [0.000025, 0.0, 0.0,
+                                   0.0, 0.000025, 0.0,
+                                   0.0, 0.0, 0.000025]
+    linear_acceleration_covariance: [0.0001, 0.0, 0.0,
+                                     0.0, 0.0001, 0.0,
+                                     0.0, 0.0, 0.0001]
+    magnetic_covariance: [0.01, 0.0, 0.0,
+                          0.0, 0.01, 0.0,
+                          0.0, 0.0, 0.01]
