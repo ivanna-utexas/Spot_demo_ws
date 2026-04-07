@@ -1,0 +1,38 @@
+name: lio_sam_saved_map
+root: ~/nav_ws
+pre_window: '[ -n "$IN_CONTAINER_NAME" ] || ./container shell'
+
+# Visualize a saved LIO-SAM map in RViz over VNC.
+#
+# Default map:
+#   maps/lio_sam/2026-04-04_debug_local_degradation-speedway-Apr4-4pm-speedway
+#
+# Examples:
+#   cd ~/nav_ws/tmux/lio-sam-saved-map
+#   tmuxinator local
+#
+#   cd ~/nav_ws/tmux/lio-sam-saved-map
+#   LIO_SAM_SAVED_MAP_DIR=$HOME/nav_ws/maps/lio_sam/2026-04-04_debug_local_degradation-speedway-Apr4-4pm-speedway \
+#   tmuxinator local
+#
+#   cd ~/nav_ws/tmux/lio-sam-saved-map
+#   LIO_SAM_SAVED_MAP_PCD=$HOME/nav_ws/maps/lio_sam/my_run/cloudGlobal.pcd \
+#   LIO_SAM_SAVED_TRAJECTORY_PCD=$HOME/nav_ws/maps/lio_sam/my_run/trajectory.pcd \
+#   tmuxinator local
+windows:
+  - saved_map:
+      layout: main-vertical
+      panes:
+        # 0: Shell for ad-hoc commands
+        -
+        # 1: VNC server for RViz
+        - vnc
+        # 2: Saved-map publishers + RViz on the VNC display
+        - >
+          sleep 8;
+          source $HOME/nav_ws/install/setup.bash &&
+          export LIO_SAM_SAVED_MAP_DIR=${LIO_SAM_SAVED_MAP_DIR:-$HOME/nav_ws/maps/lio_sam/2026-04-04_debug_local_degradation-speedway-Apr4-4pm-speedway} &&
+          DISPLAY=:9 ros2 launch lio_sam_bringup lio_sam_saved_map_viz.launch.py
+          map_pcd:=${LIO_SAM_SAVED_MAP_PCD:-${LIO_SAM_SAVED_MAP_DIR}/cloudGlobal.pcd}
+          trajectory_pcd:=${LIO_SAM_SAVED_TRAJECTORY_PCD:-${LIO_SAM_SAVED_MAP_DIR}/trajectory.pcd}
+          publish_rate:=${LIO_SAM_SAVED_MAP_PUBLISH_RATE:-1.0}

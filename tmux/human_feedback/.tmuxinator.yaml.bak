@@ -1,0 +1,14 @@
+name: subjective_feedback
+root: ~/nav_ws
+
+pre_window: source /opt/ros/humble/setup.bash && source ~/nav_ws/install/setup.bash
+
+windows:
+    - human_feedback_app:
+        layout: main-vertical
+        panes:
+          - # Main terminal
+          - ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9091
+          - ros2 run arduino_multicolored_lightswitch lightswitch_node
+          - cd ~/nav_ws/src/human_feedback_app && ./restart_backend.sh && tail -f /tmp/survey_app.log
+          - sleep 5; echo -e "\n\n  🚀 FRONTEND RUNNING AT: http://$(hostname -I | awk '{print $1}'):8080 🚀\n\n" && sleep infinity

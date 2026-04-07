@@ -379,15 +379,20 @@ RUN --mount=type=cache,target=/root/.cache/pip pip3 install pykalman
 # =============================================================================
 FROM python-ml AS nav-slam
 
+ARG ros_distro
+
 # Libraries for graph nav and enml
 RUN apt-get update && apt-get install -y \
   libfreeimage3 \
   libfreeimage-dev \
+  libgflags-dev \
+  libgoogle-glog-dev \
   libgtest-dev \
   libeigen3-dev \
   libjpeg8-dev \
   libgoogle-perftools-dev \
   libsuitesparse-dev \
+  libatlas-base-dev \
   libblas-dev \
   libopencv-dev \
   liblapack-dev \
@@ -396,6 +401,7 @@ RUN apt-get update && apt-get install -y \
   libncurses5-dev \
   libpopt-dev \
   libpcl-dev \
+  ros-${ros_distro}-ament-cmake \
   cimg-dev \
   && rm -rf /var/lib/apt/lists/*
 
@@ -438,6 +444,18 @@ fi
 # ROS2 and other dependencies installation scripts
 COPY scripts/ros2_deps.sh /tmp/ros2_deps.sh
 RUN /tmp/ros2_deps.sh && rm /tmp/ros2_deps.sh
+
+# Tracing Deps
+RUN apt-get update && apt-get install -y \
+    lttng-tools \
+    liblttng-ust-dev \
+    python3-babeltrace \
+    python3-lttng \
+    && rm -rf /var/lib/apt/lists/*
+RUN pip install \
+    jupyter \
+    bokeh \
+    pandas
 
 # =============================================================================
 # Stage 10: Final - User Creation and Configuration
@@ -545,6 +563,8 @@ RUN ARCH=$(dpkg --print-architecture) && \
     /tmp/setup_bash_profile.sh ${ARCH} ${USERNAME} ${ROS_DISTRO} ${GID} && \
     rm -f /tmp/bash_profile.shared /tmp/bash_profile.robot /tmp/bash_profile.desktop /tmp/setup_bash_profile.sh
 
+RUN mkdir -p /opt/spot_audio_models && \
+    chown -R ${UID}:${GID} /opt/spot_audio_models
 
 # Create .tmux.conf
 RUN echo "set -g mouse on" >> /home/${USERNAME}/.tmux.conf && \
@@ -591,3 +611,27 @@ RUN mkdir -p /opt/spot_audio_models && \
 COPY scripts/setup_unicast.sh /home/${username}/setup_unicast.sh
 RUN /home/${username}/setup_unicast.sh && rm /home/${username}/setup_unicast.sh
 
+# # =============================================================================
+# # Superodom dependencies
+# # =============================================================================
+# WORKDIR /tmp
+# RUN git clone http://github.com/strasdat/Sophus.git && \
+#       cd Sophus && git checkout 97e7161 && \
+#       mkdir build && cd build && \
+#       cmake .. -DBUILD_TESTS=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5 && \
+#       make -j8 && sudo make install
+
+# WORKDIR /tmp
+# RUN git clone https://github.com/borglab/gtsam.git && \
+#       cd gtsam && git checkout 4abef92 && \
+#       mkdir build && cd build && \
+#       cmake .. -DCMAKE_POLICY_VERSION_MINIMUM=3.5 && \
+#       make -j8 && sudo make install
+
+# # Livox-SDK2
+# WORKDIR /tmp
+# RUN git clone https://github.com/Livox-SDK/Livox-SDK2.git && \
+#       cd Livox-SDK2 && \
+#       mkdir build && cd build && \
+#       cmake .. -DCMAKE_POLICY_VERSION_MINIMUM=3.5 && \
+#       make -j8 && sudo make install

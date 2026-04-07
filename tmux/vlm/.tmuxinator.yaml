@@ -5,21 +5,16 @@ windows:
   - simulator:
       layout: main-vertical
       panes:
-        - cd src/vlm_policy && python -m pytest test/ -v --tb=short
-        - ros2 launch ironback_description description.launch.py
-        - ros2 launch people_detector people_format_adapter.launch.py
-        - ros2 launch azure_kinect_ros_driver driver.launch.py depth_mode:=NFOV_UNBINNED color_resolution:=720P fps:=30
-        # - ros2 launch spot_nav navigation.launch.py map:=<%= ENV['MAP'] || 'ahg_2' %>
-        - ros2 launch spot_nav navigation.launch.py spot_config_file:=/home/ros/nav_ws/params/spot_driver.yaml map:=ahg_home_Feb12
-        # - ros2 launch spot_driver spot_driver.launch.py --ros-args -p BOSDYN_CLIENT_USERNAME:=ros -p BOSDYN_CLIENT_PASSWORD:=rosrosros
-        - ros2 launch spot_driver spot_driver.launch.py config_file:=/home/ros/nav_ws/params/spot_driver.yaml
-        - ros2 launch spot_velodyne velodyne.launch.py
-        - ros2 run spot_joy teleop_node
-        # - ros2 launch hdl_people_tracking hdl_people_tracking.launch.py
-        - ros2 launch hdl_people_tracking hdl_people_tracking.launch.py static_sensor:=true
-        # - ros2 launch social_nav_policy social_nav_policy_launch.py publish_debug:=true --ros-args --log-level debug
-        - ros2 launch social_nav_policy social_nav_policy_launch.py publish_debug:=true log_level:=debug
-        # - ros2 launch social_nav_policy social_nav_costmap_launch.py --ros-args --log-level debug
-        - ros2 launch social_nav_policy social_nav_costmap_launch.py log_level:=debug
-        - vnc
-        - sleep 10; DISPLAY=:9 rviz2 -d rviz2/navstack.rviz
+        - tmux select-pane -T tests; cd src/vlm_policy && python -m pytest test/ -v --tb=short --run-vllm-probe
+        - tmux select-pane -T robot_description; ros2 launch ironback_description description.launch.py
+        - tmux select-pane -T people_detector; ros2 launch people_detector people_format_adapter.launch.py
+        - tmux select-pane -T kinect; ros2 launch azure_kinect_ros_driver driver.launch.py depth_mode:=NFOV_UNBINNED color_resolution:=720P fps:=30
+        - tmux select-pane -T nav; ros2 launch spot_nav navigation.launch.py spot_config_file:=/home/ros/nav_ws/params/spot_driver.yaml map:=ahg_home_Feb12
+        - tmux select-pane -T driver; ros2 launch spot_driver spot_driver.launch.py config_file:=/home/ros/nav_ws/params/spot_driver.yaml
+        - tmux select-pane -T velodyne; ros2 launch spot_velodyne velodyne.launch.py
+        - tmux select-pane -T teleop; ros2 run spot_joy teleop_node
+        - tmux select-pane -T tracking; ros2 launch hdl_people_tracking hdl_people_tracking.launch.py static_sensor:=true
+        - tmux select-pane -T social_nav; ros2 launch social_nav_policy social_nav_policy_launch.py publish_debug:=true log_level:=debug vlm_endpoint:=http://127.0.0.1:8000/v1/chat/completions vlm_model_name:=socialnav
+        - tmux select-pane -T costmap; ros2 launch social_nav_policy social_nav_costmap_launch.py log_level:=debug
+        - tmux select-pane -T vnc; vnc
+        - tmux select-pane -T rviz; sleep 10; DISPLAY=:9 rviz2 -d rviz2/navstack.rviz

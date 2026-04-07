@@ -4,19 +4,15 @@ root: ~/nav_ws
 pre_window: source /opt/ros/humble/setup.bash && source ~/nav_ws/install/setup.bash
 
 windows:
-  - human_feedback_app:
-      layout: main-vertical
-      panes:
-        - # Main terminal
-        - ros2 launch ironback_description description.launch.py
-        - ros2 launch azure_kinect_ros_driver driver.launch.py depth_mode:=NFOV_UNBINNED color_resolution:=720P fps:=30
-        - ros2 launch hdl_people_tracking hdl_people_tracking.launch.py
-        - ros2 launch people_detector people_format_adapter.launch.py
-        - ros2 launch spot_velodyne velodyne.launch.py device_ip:=192.168.50.201
-        - ros2 launch spot_nav navigation.launch.py spot_config_file:=/home/ros/nav_ws/params/spot_driver.yaml map:=ahg_home_Feb12
-        - ros2 launch rosbridge_server rosbridge_websocket_launch.xml
-        - ros2 run arduino_multicolored_lightswitch lightswitch_node
-        - cd ~/nav_ws/src/human_feedback_app && ./restart_backend.sh && tail -f /tmp/survey_app.log
-        - sleep 5; echo -e "\n\n  🚀 FRONTEND RUNNING AT: http://$(hostname -I | awk '{print $1}'):8080 🚀\n\n" && sleep infinity
-        - vnc
-        - sleep 10; DISPLAY=:9 rviz2 -d rviz2/navstack.rviz
+    - human_feedback_app:
+        layout: main-vertical
+        panes:
+          - sleep 8; clear; echo "YOUR ROBOT IP ADDRESS IS:"; hostname -I; echo "--------------------------------"; echo "Access the Dashboard on PORT 8080"; echo ""; echo "Press Ctrl+B then D to detach."; sleep infinity
+          - ros2 launch people_detector people_format_adapter.launch.py
+          - ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9091
+          - ros2 run arduino_multicolored_lightswitch lightswitch_node
+          - cd ~/nav_ws/src/human_feedback_app && ./restart_backend.sh && tail -f /tmp/survey_app.log
+          # Standalone panes: launched when STANDALONE=1 (no navstack running)
+          - <%= ENV['STANDALONE'] == '1' ? 'ros2 launch spot_velodyne velodyne.launch.py device_ip:=192.168.50.201' : 'echo "Velodyne: provided by navstack"; sleep infinity' %>
+          - <%= ENV['STANDALONE'] == '1' ? 'sleep 5; ros2 launch hdl_people_tracking hdl_people_tracking.launch.py' : 'echo "People tracking: provided by navstack"; sleep infinity' %>
+          - <%= ENV['STANDALONE'] == '1' ? 'ros2 run av_recorder bag_recorder' : 'echo "Bag recorder: provided by navstack"; sleep infinity' %>

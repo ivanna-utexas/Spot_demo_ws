@@ -42,6 +42,7 @@ if command -v nvpmodel &> /dev/null; then
     ISJETSON=1
     HOST_FLAGS+=" --runtime nvidia --privileged --pid host --cap-add SYS_PTRACE "
     # HOST_FLAGS+=" --runtime nvidia --privileged --ipc=host --pid host --cap-add SYS_PTRACE "
+    # HOST_FLAGS+=" --runtime nvidia --privileged --ipc=host --network=host --pid host --cap-add SYS_PTRACE "
 else
     echo ''
     #echo "This does not appear to be a NVIDIA Jetson device (nvpmodel not found)."
@@ -141,7 +142,7 @@ fi
 CONTAINER_FILE=$ROOT/docker/Dockerfile
 _DISPLAY="${DISPLAY-:0}"
 
-RUNNING_CONTAINER=$(docker container ls -q --filter name=$CONTAINER_NAME)
+RUNNING_CONTAINER=$(docker container ls -q --filter name="^/${CONTAINER_NAME}$")
 
 EXEC="/bin/bash -l"
 MOUNT_DATA=""
@@ -318,12 +319,12 @@ dockerrun() {
       $env_flags \
       -it -d --name=$CONTAINER_NAME $CONTAINER_NAME $HOST_EXEC; then
       # started successfully
-      RUNNING_CONTAINER=$(docker container ls -q --filter name=$CONTAINER_NAME)
+      RUNNING_CONTAINER=$(docker container ls -q --filter name="^/${CONTAINER_NAME}$")
       break
     else
       rc=$?
       # Check if container exists now (another parallel process started it)
-      RUNNING_CONTAINER=$(docker container ls -q --filter name=$CONTAINER_NAME)
+      RUNNING_CONTAINER=$(docker container ls -q --filter name="^/${CONTAINER_NAME}$")
       if [[ ! -z "$RUNNING_CONTAINER" ]]; then
         echo "Container $CONTAINER_NAME is already running (detected after failed run)."
         break
@@ -354,7 +355,7 @@ dockershell() {
   docker exec -it $RUNNING_CONTAINER $EXEC
 }
 dockercmd() {
-  RUNNING_CONTAINER=$(docker container ls -q --filter name=$CONTAINER_NAME)
+  RUNNING_CONTAINER=$(docker container ls -q --filter name="^/${CONTAINER_NAME}$")
   docker exec -it $RUNNING_CONTAINER /bin/bash -l -c "$@"
 }
 
@@ -387,12 +388,12 @@ case $DOCKER_COMMAND in
     ;;
   restart)
     dockerstop
-    RUNNING_CONTAINER=$(docker container ls -q --filter name=$CONTAINER_NAME)
+    RUNNING_CONTAINER=$(docker container ls -q --filter name="^/${CONTAINER_NAME}$")
     dockerrun
     ;;
   shell)
     [[ ! -z "$RUNNING_CONTAINER" ]] || dockerrun
-    RUNNING_CONTAINER=$(docker container ls -q --filter name=$CONTAINER_NAME)
+    RUNNING_CONTAINER=$(docker container ls -q --filter name="^/${CONTAINER_NAME}$")
     dockershell
     ;;
   cmd)

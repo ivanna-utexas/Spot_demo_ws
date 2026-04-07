@@ -6,6 +6,35 @@ This workspace contains the navigation stack and related packages for the Spot r
 
 This repository uses **Cyclone DDS** in **Unicast** mode to communicate between the robot (Spot) and the operator's laptop. This configuration is necessary to avoid network congestion and ensure reliable communication over Wi-Fi.
 
+## [Tracing](https://docs.ros.org/en/humble/Tutorials/Advanced/ROS2-Tracing-Trace-and-Analyze.html)
+
+[ros2_tracing](https://github.com/ros2/ros2_tracing/tree/humble) is a package for tracing ROS 2 applications.
+
+To build and check status run in the container:
+
+```
+colcon build --packages-up-to tracetools --allow-overriding tracetools
+source ./install/setup.bash
+ros2 run tracetools status
+```
+
+
+If the `trace` extension cannot be found, try re-building the ros2trace package:
+
+```
+rm -rf install/ros2trace build/ros2trace
+colcon build --symlink-install --packages-select ros2trace
+source install/setup.bash
+ros2 trace --session-name perf-test --list
+```
+
+To start tracing:
+
+```
+source install/setup.bash
+ros2 trace --session-name perf-test --list
+```
+
 ### Prerequisites
 
 *   **Robot:** Hostname must be `spot` or `spot-orin`.
@@ -84,3 +113,33 @@ To verify connectivity:
 To run it, simply run ```tmuxinator``` on /tmux/hdl_people_tracking/
 
 To properly visualize, in rviz2, switch the Fixed Frame under Global Options to "odom". Then, add "/detection_markers" and "human_points" by topic.
+
+## SuperOdom
+
+SuperOdom source syncing is split from ROS 2 execution:
+
+1. Sync pinned sources on the host:
+   ```bash
+   vcs import src < repos/superodom.repos
+   ```
+2. Run all `colcon` and `ros2` commands in Docker only.
+
+Recommended build flow:
+
+```bash
+./container build
+./container start
+./container cmd 'source /opt/ros/humble/setup.bash && cd /home/ros/nav_ws && colcon build --packages-select sophus_vendor gtsam_vendor --executor sequential --parallel-workers 1'
+./container cmd 'source /opt/ros/humble/setup.bash && cd /home/ros/nav_ws && colcon build --packages-up-to spot_nav'
+```
+
+Supported launch commands:
+
+```bash
+./container cmd 'source /opt/ros/humble/setup.bash && source /home/ros/nav_ws/install/setup.bash && ros2 launch spot_nav spot_mapping.launch.py'
+./container cmd 'source /opt/ros/humble/setup.bash && source /home/ros/nav_ws/install/setup.bash && ros2 launch super_odometry vlp_16.launch.py'
+./container cmd 'source /opt/ros/humble/setup.bash && source /home/ros/nav_ws/install/setup.bash && ros2 launch super_odometry livox_mid360.launch.py'
+./container cmd 'source /opt/ros/humble/setup.bash && source /home/ros/nav_ws/install/setup.bash && ros2 launch super_odometry os1_128.launch.py'
+```
+
+Default SuperOdom artifacts live under `/home/ros/nav_ws/maps/superodom/` inside the container, which persists because the workspace root is bind-mounted by `./container`.

@@ -17,14 +17,19 @@ windows:
         - ros2 launch spot_driver spot_driver.launch.py config_file:=/home/ros/nav_ws/params/spot_driver.yaml
         - ros2 launch ironback_description description.launch.py
         - ros2 launch azure_kinect_ros_driver driver.launch.py depth_mode:=NFOV_UNBINNED color_resolution:=720P fps:=30
-        - sleep 15; ros2 launch spot_nav navigation.launch.py spot_config_file:=/home/ros/nav_ws/params/spot_driver.yaml map:=ahg_home_Feb12 launch_driver:=True
+        - sleep 15; NAVSTACK_DEFAULT_MAP=$HOME/nav_ws/maps/final/current_nav.yaml; NAVSTACK_MAP_ARG=${NAVSTACK_MAP:-$NAVSTACK_DEFAULT_MAP}; if [ ! -f "$NAVSTACK_MAP_ARG" ] && [ "$NAVSTACK_MAP_ARG" = "$NAVSTACK_DEFAULT_MAP" ]; then NAVSTACK_MAP_ARG=ahg_home_Feb12; fi; ros2 launch spot_nav navigation.launch.py spot_config_file:=/home/ros/nav_ws/params/spot_driver.yaml map:=$NAVSTACK_MAP_ARG launch_driver:=True
         - ros2 launch hdl_people_tracking hdl_people_tracking.launch.py
         - ros2 launch spot_velodyne velodyne.launch.py device_ip:=192.168.50.201
-        - 'ros2 launch spot_joy teleop.launch.py verbose:=true joy_device_name:="${JOY_DEVICE_NAME:-Wireless Controller}"'
-        - # teleop stack launched above (joy_node + teleop_node)
+        - ros2 run joy joy_node --ros-args -p dev:=/dev/input/js1
+        - ros2 run spot_joy teleop_node --ros-args -p verbose:=true
         - vnc
         - ros2 launch spot_eye_animation eye_animation.launch.py 
         - ros2 launch social_nav_policy social_nav_policy_launch.py publish_debug:=true log_level:=debug vlm_endpoint:=http://127.0.0.1:8000/v1/chat/completions vlm_model_name:=socialnav
         - ros2 launch social_nav_policy social_nav_costmap_launch.py log_level:=debug
         - sleep 10; DISPLAY=:9 rviz2 -d rviz2/navstack.rviz
         - ros2 run av_recorder bag_recorder
+        - ros2 launch people_detector people_format_adapter.launch.py
+        - ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9091
+        - ros2 run arduino_multicolored_lightswitch lightswitch_node
+        - cd ~/nav_ws/src/human_feedback_app && ./restart_backend.sh && tail -f /tmp/survey_app.log
+        - sleep 5; echo -e "\n\n  🚀 FRONTEND RUNNING AT: http://$(hostname -I | awk '{print $1}'):8080 🚀\n\n" && sleep infinity

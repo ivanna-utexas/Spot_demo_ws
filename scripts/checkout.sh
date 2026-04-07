@@ -31,3 +31,8 @@ clone_or_pull main https://github.com/bdaiinstitute/spot_ros2.git spot_ros2
 clone_or_pull master git@github.com:ut-amrl/spot_velodyne.git spot_velodyne
 clone_or_pull ros2 git@github.com:ut-amrl/SuperOdom.git SuperOdom
 clone_or_pull master git@github.com:ut-amrl/arduino_multicolored_lightswitch.git arduino_multicolored_lightswitch
+
+#clone_or_pull ros2_spot git@github.com:ut-amrl/SuperOdom.git SuperOdom
+
+clone_or_pull humble https://github.com/ros2/ros2_tracing.git ros2_tracing
+clone_or_pull humble https://github.com/ros-tracing/tracetools_analysis.git tracetools_analysis

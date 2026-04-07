@@ -1,0 +1,37 @@
+name: lio_sam_recording
+root: ~/nav_ws
+pre_window: ./container shell
+
+# Launch-time overrides are read from the environment. Example:
+#   cd ~/nav_ws/tmux/lio-sam-recording
+#   LIO_SAM_RECORD_NAME=speedway_loop1 \
+#   LIO_SAM_DEVICE_IP=192.168.50.201 \
+#   LIO_SAM_VELODYNE_RPM=1200.0 \
+#   LIO_SAM_VECTORNAV_PORT=/dev/ttyUSB0 \
+#   LIO_SAM_VECTORNAV_BAUD=921600 \
+#   tmuxinator local
+#
+# This session is meant for raw data capture for later LIO-SAM replay.
+# It launches the minimum sensor stack plus Spot state topics that are useful
+# to keep in the bag (/imu/data, /odometry, /tf, /tf_static, /joint_states).
+windows:
+  - recording:
+      layout: main-vertical
+      panes:
+        # 0: Shell for ad-hoc commands
+        -
+        # 1: Spot driver for robot state, /imu/data, /odometry, /tf, /tf_static
+        - ros2 launch spot_driver spot_driver.launch.py config_file:=$HOME/nav_ws/params/spot_driver.yaml launch_image_publishers:=false enable_streaming_imu_publisher:=true
+        # 2: Velodyne VLP-16 pointcloud publisher
+        - sleep 2; ros2 launch spot_velodyne velodyne.launch.py device_ip:=${LIO_SAM_DEVICE_IP:-192.168.50.201} rpm:=${LIO_SAM_VELODYNE_RPM:-600.0}
+        # 3: VectorNav serial driver
+        - sleep 2; ros2 run vectornav vectornav --ros-args -r __node:=vectornav --params-file $HOME/nav_ws/config/lio_sam/vectornav_vn100.yaml -p port:=${LIO_SAM_VECTORNAV_PORT:-/dev/ttyUSB0} -p baud:=${LIO_SAM_VECTORNAV_BAUD:-921600} -p frame_id:=imu_link
+        # 4: VectorNav sensor_msgs/Imu publisher on /vectornav/imu
+        - sleep 4; ros2 run vectornav vn_sensor_msgs --ros-args -r __node:=vn_sensor_msgs --params-file $HOME/nav_ws/config/lio_sam/vectornav_vn100.yaml
+        # 5: Recorder for the raw bag used later by LIO-SAM replay
+        - sleep 8; $HOME/nav_ws/scripts/record_mapping_bag.sh --name ${LIO_SAM_RECORD_NAME:-speedway_run} --estimate-gb ${LIO_SAM_ESTIMATE_GB:-25}
+        - 
+        # 6: Monitor Velodyne rate
+        - sleep 5; ros2 topic hz /velodyne_points
+        # 7: Monitor VectorNav IMU rate
+        - sleep 5; ros2 topic hz /vectornav/imu

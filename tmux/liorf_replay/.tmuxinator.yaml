@@ -1,0 +1,26 @@
+name: liorf_replay
+root: ~/nav_ws
+pre_window: ./container shell
+
+windows:
+  - replay:
+      layout: main-vertical
+      panes:
+        # 0: Shell for ad-hoc commands
+        -
+        # 1: URDF publisher (base_link → velodyne TF)
+        - ros2 launch ironback_description description.launch.py use_sim_time:=true
+        # 2: Static map → odom TF (liorf ros2 fork does not publish it)
+        - sleep 2; ros2 run tf2_ros static_transform_publisher 0 0 0 0 0 0 map odom
+        # 3: LiORF replay (mapping_common + SLAM nodes)
+        - sleep 5; source $HOME/nav_ws/scripts/liorf_env.sh && ros2 launch spot_liorf_bringup liorf_replay.launch.py imu_input_topic:=/imu
+        # 4: Bag playback
+        - sleep 10; ros2 bag play $HOME/nav_ws/bags/slam-test-bags/2026-03-27_13-54-36 --clock
+        # 5: Monitor liorf odometry
+        - ros2 topic hz /liorf/mapping/odometry --use-sim-time
+        # 6: Monitor IMU adapter
+        - ros2 topic hz /mapping/imu --use-sim-time
+        # 7: VNC for RViz
+        - vnc
+        # 8: RViz2
+        - sleep 15; DISPLAY=:9 rviz2 -d $HOME/nav_ws/src/LI_ORF/rviz/mapping.rviz --ros-args -p use_sim_time:=true

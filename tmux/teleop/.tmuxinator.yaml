@@ -11,7 +11,7 @@ windows:
         - ros2 launch spot_driver spot_driver.launch.py config_file:=/home/ros/nav_ws/params/spot_driver.yaml
         # - ros2 launch hdl_people_tracking hdl_people_tracking.launch.py
         - ros2 launch spot_velodyne velodyne.launch.py device_ip:=192.168.50.201
-        # - ros2 run joy joy_node
-        - ros2 run spot_joy teleop_node --ros-args -p verbose:=true
+        - 'ros2 launch spot_joy teleop.launch.py verbose:=true joy_device_name:="${JOY_DEVICE_NAME:-Wireless Controller}"'
+        - # teleop stack launched above (joy_node + teleop_node)
         - vnc
         - sleep 10; DISPLAY=:9 rviz2 -d rviz2/navstack.rviz
