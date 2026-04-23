@@ -16,7 +16,7 @@ windows:
         - ros2 topic hz /scan
         # - ros2 launch foxglove_bridge foxglove_bridge_launch.xml
         - sleep 10; DISPLAY=:9 rviz2 -d rviz2/navstack.rviz
-        - 'ros2 launch spot_joy teleop.launch.py verbose:=true joy_device_name:="${JOY_DEVICE_NAME:-Wireless Controller}"'
+        - 'ros2 launch spot_joy teleop.launch.py verbose:=true joy_dev:="${JOY_DEV:-/dev/input/ps4_primary}"'
         - # teleop stack launched above (joy_node + teleop_node)
           # - 
           #  - cd ../cotnav_ws

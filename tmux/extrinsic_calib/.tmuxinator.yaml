@@ -14,5 +14,7 @@ windows:
         - ros2 run tf2_ros static_transform_publisher 0.0 0.0 0.0 0 0 0 1 body sensor_plate_link
         - ros2 run tf2_ros static_transform_publisher 0.23 0 -0.075 4.7124 0 4.7124 1 sensor_plate_link camera_base
         - ros2 run tf2_ros static_transform_publisher 0.4064 0.03 -0.17 4.6600 0 4.7124 1 sensor_plate_link velodyne
+        - ros2 run tf2_ros static_transform_publisher 0.0 0.0 0.0 0.0 0.0 0.0 1.0 sensor_plate_link zed_right_camera_link
+        - ros2 run tf2_ros static_transform_publisher 0.0 0.0 0.0 0.0 0.0 0.0 1.0 sensor_plate_link zed_left_camera_link
         - vnc
         - sleep 10; DISPLAY=:9 rviz2 -d rviz2/navstack.rviz

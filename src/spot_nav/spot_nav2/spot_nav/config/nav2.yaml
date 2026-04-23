@@ -1,0 +1,540 @@
+# ==============================================================================
+# AMCL (Adaptive Monte Carlo Localization)
+# ==============================================================================
+# AMCL uses particle filter to estimate robot pose based on laser scans and map
+amcl:
+  ros__parameters:
+    # General Settings
+    use_sim_time: False # Use simulation time (set to False for real robot)
+    
+    # Motion Model Parameters (OmniMotionModel - used for Ackermann vehicles)
+    # These alpha values define odometry noise characteristics
+    alpha1: 0.2  # Expected noise in rotation as a function of rotation
+    alpha2: 0.2  # Expected noise in rotation as a function of translation
+    alpha3: 0.2  # Expected noise in translation as a function of translation
+    alpha4: 0.2  # Expected noise in translation as a function of rotation
+    alpha5: 0.2  # Translation noise for strafe (omnidirectional motion)
+    
+    # Frame IDs
+    base_frame_id: "base_link"  # Robot's base coordinate frame
+    global_frame_id: "map"      # Global (map) coordinate frame
+    odom_frame_id: "odom"       # Odometry coordinate frame
+    
+    # Beam Skipping (optimization to reduce computation)
+    do_beamskip: false                # Enable/disable beam skipping
+    beam_skip_distance: 0.5           # Min distance before skipping beams (m)
+    beam_skip_threshold: 0.3          # Threshold for skipping beams
+    beam_skip_error_threshold: 0.9    # Max error allowed when skipping
+    
+    # Laser Model Parameters
+    laser_model_type: "likelihood_field"  # Likelihood field model for scan matching
+    laser_likelihood_max_dist: 2.0        # Max distance for obstacle in likelihood field (m)
+    laser_max_range: 50.0                 # Max laser range to use for localization (m)
+    laser_min_range: 0.3                  # Min laser range to use (m)
+    max_beams: 60                         # Max number of beams to use (reduces computation)
+    
+    # Laser Likelihood Field Mixture Weights (must sum to ~1.0)
+    z_hit: 0.5      # Weight for correct range measurements
+    z_short: 0.05   # Weight for short readings (unexpected obstacles)
+    z_max: 0.05     # Weight for max range readings
+    z_rand: 0.5     # Weight for random measurements (noise)
+    
+    # Laser Likelihood Field Parameters
+    sigma_hit: 0.2      # Std dev of Gaussian for hit distribution (m)
+    lambda_short: 0.1   # Exponential decay param for short readings
+    
+    # Particle Filter Parameters
+    min_particles: 50   # Minimum number of particles in filter
+    max_particles: 500  # Maximum number of particles (higher = more accurate but slower)
+    pf_err: 0.05       # Max error between true and estimated distribution
+    pf_z: 0.99         # Upper standard deviation for particle distribution
+    resample_interval: 1  # Number of filter updates before resampling
+    
+    # Recovery Parameters (for when localization gets lost)
+    recovery_alpha_slow: 0.0  # Slow average weight filter decay rate (0 = disabled)
+    recovery_alpha_fast: 0.0  # Fast average weight filter decay rate (0 = disabled)
+    
+    # Motion Model
+    robot_model_type: "nav2_amcl::OmniMotionModel"  # Omni model works for Ackermann
+    
+    # Update Thresholds
+    # AMCL only updates when robot moves beyond these thresholds
+    update_min_d: 0.1   # Min linear distance before update (m) - TUNED for faster convergence
+    update_min_a: 0.15  # Min angular distance before update (rad ~8.6°) - TUNED
+    
+    # Transform Settings
+    tf_broadcast: true         # Broadcast map->odom transform
+    transform_tolerance: 1.0   # TF tolerance (s) — also controls MessageFilter wait time for scan TF lookups. Nav2 default is 1.0.
+    save_pose_rate: 0.5       # Rate to save estimated pose (Hz)
+    
+    # Topic Names
+    scan_topic: scan  # Laser scan topic to subscribe to
+    map_topic: map    # Map topic to subscribe to
+    
+    # Initial Pose Settings
+    set_initial_pose: true           # Whether to set an initial pose
+    always_reset_initial_pose: false # Reset to initial pose on every startup
+    first_map_only: true            # Only use first map received (ignore republishes)
+    initial_pose:                   # Initial pose estimate (if set_initial_pose = true)
+      x: 0.0    # Initial X position (m)
+      y: 0.0    # Initial Y position (m)
+      z: 0.0    # Initial Z position (m)
+      yaw: 0.0  # Initial yaw angle (rad)
+
+# ==============================================================================
+# BT Navigator (Behavior Tree Navigator)
+# ==============================================================================
+# Coordinates navigation behaviors and error handling
+bt_navigator:
+  ros__parameters:
+    global_frame: map            # Global reference frame
+    robot_base_frame: base_link  # Robot's base frame
+    odom_topic: /odom           # Odometry topic
+    bt_loop_duration: 10        # Duration of BT loop (ms)
+    default_server_timeout: 20  # Default timeout for action servers (s)
+    wait_for_service_timeout: 1000  # Timeout waiting for services (ms)
+    action_server_result_timeout: 900.0  # Timeout for action results (s)
+    
+    # Navigator Plugins
+    navigators: ["navigate_to_pose", "navigate_through_poses"]
+    navigate_to_pose:
+      plugin: "nav2_bt_navigator::NavigateToPoseNavigator"
+    navigate_through_poses:
+      plugin: "nav2_bt_navigator::NavigateThroughPosesNavigator"
+    
+    # Error Codes
+    error_code_names:
+      - compute_path_error_code
+      - follow_path_error_code
+
+# ==============================================================================
+# Controller Server
+# ==============================================================================
+# Executes path following using MPPI controller
+controller_server:
+  ros__parameters:
+    controller_frequency: 20.0      # Controller update rate (Hz)
+    costmap_update_timeout: 0.30    # Max time to wait for costmap update (s)
+    
+    # Velocity Thresholds (consider robot stopped if below these)
+    min_x_velocity_threshold: 0.001
+    min_y_velocity_threshold: 0.001
+    min_theta_velocity_threshold: 0.001
+    
+    failure_tolerance: 0.3  # Tolerance for controller failure
+    
+    # Plugin Configuration
+    progress_checker_plugins: ["progress_checker"]
+    goal_checker_plugins: ["general_goal_checker"]
+    controller_plugins: ["FollowPath"]
+    use_realtime_priority: false  # Use realtime priority for controller thread
+    
+    # Progress Checker - Ensures robot is making forward progress
+    progress_checker:
+      plugin: "nav2_controller::SimpleProgressChecker"
+      required_movement_radius: 0.5  # Min movement radius to consider progress (m)
+      movement_time_allowance: 10.0  # Max time allowed without progress (s)
+      
+    # Goal Checker - Determines when goal is reached
+    general_goal_checker:
+      stateful: True  # Maintain state between checks
+      plugin: "nav2_controller::SimpleGoalChecker"
+      xy_goal_tolerance: 0.25   # Position tolerance to goal (m)
+      yaw_goal_tolerance: 0.25  # Orientation tolerance to goal (rad ~14°)
+      
+    # Regulated Pure Pursuit Controller
+    # Switched from DWB to isolate controller crash (malloc corruption)
+    FollowPath:
+      plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
+      desired_linear_vel: 0.5
+      lookahead_dist: 0.6
+      min_lookahead_dist: 0.6         # was 0.3 — prevents lookahead collapse at low speed
+      max_lookahead_dist: 1.5         # was 0.9 — headroom for velocity-scaled lookahead
+      lookahead_time: 2.5             # was 1.5 — primary smoothness knob (effective = v * t)
+      rotate_to_heading_angular_vel: 1.0
+      transform_tolerance: 1.0
+      use_velocity_scaled_lookahead_dist: true
+      min_approach_linear_velocity: 0.05
+      approach_velocity_scaling_dist: 0.6
+      use_regulated_linear_velocity_scaling: true
+      use_cost_regulated_linear_velocity_scaling: false
+      regulated_linear_scaling_min_radius: 0.9
+      regulated_linear_scaling_min_speed: 0.25
+      allow_reversing: false
+      max_angular_accel: 3.2
+      max_robot_pose_search_dist: 10.0
+
+# ==============================================================================
+# Local Costmap
+# ==============================================================================
+# Rolling window costmap around robot for local planning
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      update_frequency: 5.0    # Costmap update rate (Hz)
+      publish_frequency: 2.0   # Costmap publish rate (Hz)
+      global_frame: odom       # Frame for costmap (odom for local)
+      robot_base_frame: base_link
+      rolling_window: true     # Costmap follows robot (rolling window)
+      width: 3                 # Costmap width (m)
+      height: 3                # Costmap height (m)
+      resolution: 0.05         # Cell resolution (m/cell)
+      
+      # Robot Footprint (rectangular, in meters relative to base_link)
+      # Format: [[front_left], [front_right], [back_right], [back_left]]
+      footprint: "[[0.55, 0.25], [0.55, -0.25], [-0.55, -0.25], [-0.55, 0.25]]"
+      
+      # Costmap Layers
+      plugins: ["obstacle_layer", "social_nav_layer", "inflation_layer"]
+
+      # Inflation Layer - Inflates obstacles for safety margin
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        cost_scaling_factor: 3.0  # How rapidly cost decays from obstacle
+        inflation_radius: 0.35     # Inflation radius (m)
+
+      # Obstacle Layer - 2D obstacle detection
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: True
+        observation_sources: scan
+        scan:
+          topic: /scan
+          max_obstacle_height: 2.0
+          clearing: True
+          marking: True
+          data_type: "LaserScan"
+          raytrace_max_range: 3.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 2.5
+          obstacle_min_range: 0.0
+
+      # Social Nav Layer - VLM pedestrian action costs
+      social_nav_layer:
+        plugin: "social_nav_costmap_layer/SocialNavLayer"
+        enabled: true
+        ped_actions_topic: "/social_nav/ped_actions"
+        message_timeout_s: 2.0
+        avoid_inflation_radius_m: 1.5
+        avoid_predict_horizon_s: 3.0
+        avoid_predict_steps: 6
+        overtake_inflation_radius_m: 1.0
+        overtake_behind_cost: 85
+        overtake_side_clear_m: 2.0
+        overtake_side_incentive_cost: 15
+        overtake_predict_horizon_s: 2.0
+        overtake_predict_steps: 4
+        yield_inflation_radius_m: 1.2
+        yield_predict_horizon_s: 3.0
+        yield_predict_steps: 6
+        follow_distance_m: 1.5
+        follow_trail_radius_m: 0.8
+        follow_trail_incentive_cost: 10
+        follow_predict_horizon_s: 2.0
+        follow_predict_steps: 4
+
+      always_send_full_costmap: True  # Always send full costmap
+
+# ==============================================================================
+# Global Costmap
+# ==============================================================================
+# Static costmap based on map for global planning
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      update_frequency: 1.0    # Costmap update rate (Hz)
+      publish_frequency: 1.0   # Costmap publish rate (Hz)
+      global_frame: map        # Frame for costmap (map for global)
+      robot_base_frame: base_link
+      
+      # Robot Footprint (same as local costmap)
+      footprint: "[[0.55, 0.25], [0.55, -0.25], [-0.55, -0.25], [-0.55, 0.25]]"
+      resolution: 0.05            # Cell resolution (m/cell)
+      track_unknown_space: true   # Track unknown cells in costmap
+      
+      # Costmap Layers
+      plugins: ["static_layer", "obstacle_layer", "social_nav_layer", "inflation_layer"]
+
+      # Obstacle Layer - Dynamic obstacles from sensors
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: True
+        observation_sources: scan
+        scan:
+          topic: /scan
+          max_obstacle_height: 2.0
+          clearing: True
+          marking: True
+          data_type: "LaserScan"
+          raytrace_max_range: 3.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 2.5
+          obstacle_min_range: 0.0
+
+      # Static Layer - Loads map from map_server
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_subscribe_transient_local: True  # QoS setting for map topic
+
+      # Social Nav Layer - VLM pedestrian action costs
+      social_nav_layer:
+        plugin: "social_nav_costmap_layer/SocialNavLayer"
+        enabled: true
+        ped_actions_topic: "social_nav/ped_actions"
+        message_timeout_s: 2.0
+        avoid_inflation_radius_m: 1.5
+        avoid_predict_horizon_s: 3.0
+        avoid_predict_steps: 6
+        overtake_inflation_radius_m: 1.0
+        overtake_behind_cost: 85
+        overtake_side_clear_m: 2.0
+        overtake_side_incentive_cost: 15
+        overtake_predict_horizon_s: 2.0
+        overtake_predict_steps: 4
+        yield_inflation_radius_m: 1.2
+        yield_predict_horizon_s: 3.0
+        yield_predict_steps: 6
+        follow_distance_m: 1.5
+        follow_trail_radius_m: 0.8
+        follow_trail_incentive_cost: 10
+        follow_predict_horizon_s: 2.0
+        follow_predict_steps: 4
+
+      # Inflation Layer
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        cost_scaling_factor: 3.0
+        inflation_radius: 0.35
+
+      always_send_full_costmap: True
+
+# ==============================================================================
+# Map Server
+# ==============================================================================
+# Loads and serves static maps
+map_server:
+  ros__parameters:
+    use_sim_time: False
+    yaml_filename: "map.yaml"  # Map file to load
+    
+# ==============================================================================
+# Map Saver
+# ==============================================================================
+# Saves maps to disk
+map_saver:
+  ros__parameters:
+    save_map_timeout: 5.0          # Timeout for saving map (s)
+    free_thresh_default: 0.25      # Probability threshold for free cells
+    occupied_thresh_default: 0.65  # Probability threshold for occupied cells
+    map_subscribe_transient_local: True
+
+# ==============================================================================
+# Planner Server
+# ==============================================================================
+# Computes global paths from start to goal
+planner_server:
+  ros__parameters:
+    expected_planner_frequency: 20.0  # Expected planning rate (Hz)
+    planner_plugins: ["GridBased"]
+    costmap_update_timeout: 1.0       # Max time to wait for costmap (s)
+    
+    # Grid-Based Planner (simple, fast)
+    GridBased:
+      plugin: "nav2_navfn_planner/NavfnPlanner"
+      tolerance: 0.5       # Goal tolerance (m)
+      use_astar: false     # Use Dijkstra instead of A*
+      allow_unknown: true  # Allow planning through unknown space
+
+# ==============================================================================
+# Smoother Server
+# ==============================================================================
+# Smooths planned paths for better execution
+smoother_server:
+  ros__parameters:
+    smoother_plugins: ["simple_smoother"]
+    simple_smoother:
+      plugin: "nav2_smoother::SimpleSmoother"
+      tolerance: 1.0e-10   # Convergence tolerance
+      max_its: 1000        # Max smoothing iterations
+      do_refinement: True  # Refine path after smoothing
+
+# ==============================================================================
+# Behavior Server
+# ==============================================================================
+# Executes recovery behaviors (spin, backup, etc.)
+behavior_server:
+  ros__parameters:
+    # Costmap Topics
+    local_costmap_topic: local_costmap/costmap_raw
+    global_costmap_topic: global_costmap/costmap_raw
+    local_footprint_topic: local_costmap/published_footprint
+    global_footprint_topic: global_costmap/published_footprint
+    
+    cycle_frequency: 10.0  # Behavior execution rate (Hz)
+    
+    # Available Behaviors
+    behavior_plugins: ["spin", "backup", "drive_on_heading", "assisted_teleop", "wait"]
+    spin:
+      plugin: "nav2_behaviors/Spin"
+    backup:
+      plugin: "nav2_behaviors/BackUp"
+    drive_on_heading:
+      plugin: "nav2_behaviors/DriveOnHeading"
+    wait:
+      plugin: "nav2_behaviors/Wait"
+    assisted_teleop:
+      plugin: "nav2_behaviors/AssistedTeleop"
+    
+    # Behavior Parameters
+    local_frame: odom
+    global_frame: map
+    robot_base_frame: base_link
+    transform_tolerance: 1.0      # TF tolerance (s)
+    simulate_ahead_time: 2.0      # Simulation lookahead time (s)
+    max_rotational_vel: 1.0       # Max rotation velocity (rad/s)
+    min_rotational_vel: 0.4       # Min rotation velocity (rad/s)
+    rotational_acc_lim: 3.2       # Max rotational acceleration (rad/s²)
+
+# ==============================================================================
+# Waypoint Follower
+# ==============================================================================
+# Follows sequence of waypoints
+waypoint_follower:
+  ros__parameters:
+    loop_rate: 20                        # Update rate (Hz)
+    stop_on_failure: false               # Continue on waypoint failure
+    action_server_result_timeout: 900.0  # Action timeout (s)
+    waypoint_task_executor_plugin: "wait_at_waypoint"
+    wait_at_waypoint:
+      plugin: "nav2_waypoint_follower::WaitAtWaypoint"
+      enabled: True
+      waypoint_pause_duration: 200  # Pause at each waypoint (ms)
+
+# ==============================================================================
+# Velocity Smoother
+# ==============================================================================
+# Smooths velocity commands to avoid jerky motion
+velocity_smoother:
+  ros__parameters:
+    use_sim_time: False
+    smoothing_frequency: 20.0  # Smoothing rate (Hz) — was 5.0, must match controller_frequency to avoid choppy commands
+    scale_velocities: False   # Don't scale velocities
+    feedback: "OPEN_LOOP"     # Open-loop control (no odometry feedback)
+    
+    # Velocity Limits [vx, vy, wz]
+    max_velocity: [1.0, 0.0, 1.5]     # Max velocities (m/s, m/s, rad/s)
+    min_velocity: [-1.0, 0.0, -1.5]   # Min velocities
+    max_accel: [1.5, 0.0, 3.0]        # Max accelerations (m/s², m/s², rad/s²)
+    max_decel: [-1.5, 0.0, -3.0]      # Max decelerations
+    
+    # Closed-Loop Parameters (used if feedback = "CLOSED_LOOP")
+    odom_topic: "odom"
+    odom_duration: 0.1           # Odometry duration for velocity estimation (s)
+    deadband_velocity: [0.0, 0.0, 0.0]  # Velocity deadband
+    velocity_timeout: 1.0        # Velocity command timeout (s)
+
+# ==============================================================================
+# Collision Monitor
+# ==============================================================================
+# Monitors for potential collisions and slows/stops robot
+collision_monitor:
+  ros__parameters:
+    base_frame_id: "base_link"
+    odom_frame_id: "odom"
+    cmd_vel_in_topic: "cmd_vel_smoothed"   # Input velocity commands
+    cmd_vel_out_topic: "cmd_vel"           # Output (monitored) velocity commands
+    state_topic: "collision_monitor_state" # Monitor state topic
+    transform_tolerance: 1.0               # TF tolerance (s)
+    source_timeout: 1.0                    # Sensor timeout (s)
+    base_shift_correction: True            # Correct for base shift
+    stop_pub_timeout: 2.0                  # Timeout for stop command (s)
+    
+    # Collision Zones
+    polygons: ["FootprintApproach"]
+    FootprintApproach:
+      type: "polygon"
+      action_type: "approach"                           # Slow down when approaching
+      footprint_topic: "/local_costmap/published_footprint"
+      time_before_collision: 1.2                        # Time to collision threshold (s)
+      simulation_time_step: 0.1                         # Simulation time step (s)
+      min_points: 6                                     # Min points to consider polygon
+      visualize: False
+      enabled: True
+      
+    # Observation Sources
+    observation_sources: ["scan"]
+    scan:
+      type: "scan"
+      topic: "scan"
+      min_height: 0.15  # Min height to consider (m)
+      max_height: 2.0   # Max height to consider (m)
+      enabled: True
+
+# ==============================================================================
+# Docking Server
+# ==============================================================================
+# Handles autonomous docking to charging station
+docking_server:
+  ros__parameters:
+    controller_frequency: 50.0          # Docking controller rate (Hz)
+    initial_perception_timeout: 5.0     # Timeout for initial dock detection (s)
+    wait_charge_timeout: 5.0            # Timeout waiting for charge (s)
+    dock_approach_timeout: 30.0         # Timeout for dock approach (s)
+    undock_linear_tolerance: 0.05       # Linear tolerance for undocking (m)
+    undock_angular_tolerance: 0.1       # Angular tolerance for undocking (rad)
+    max_retries: 3                      # Max docking retry attempts
+    base_frame: "base_link"
+    fixed_frame: "odom"
+    dock_backwards: false               # Approach dock forward
+    dock_prestaging_tolerance: 0.5      # Prestaging position tolerance (m)
+    
+    # Dock Plugin
+    dock_plugins: ['simple_charging_dock']
+    simple_charging_dock:
+      plugin: 'opennav_docking::SimpleChargingDock'
+      docking_threshold: 0.05                     # Distance threshold for docked (m)
+      staging_x_offset: -0.7                      # Staging offset from dock (m)
+      use_external_detection_pose: true           # Use external dock detection
+      use_battery_status: false                   # Don't use battery status
+      use_stall_detection: false                  # Don't use stall detection
+      external_detection_timeout: 1.0             # Timeout for external detection (s)
+      
+      # External Detection Transform (dock pose relative to detection)
+      external_detection_translation_x: -0.18
+      external_detection_translation_y: 0.0
+      external_detection_rotation_roll: -1.57
+      external_detection_rotation_pitch: -1.57
+      external_detection_rotation_yaw: 0.0
+      filter_coef: 0.1  # Low-pass filter coefficient for pose smoothing
+    
+    # Docking Controller
+    controller:
+      k_phi: 3.0                                  # Heading error gain
+      k_delta: 2.0                                # Position error gain
+      v_linear_min: 0.15                          # Min docking velocity (m/s)
+      v_linear_max: 0.15                          # Max docking velocity (m/s)
+      use_collision_detection: true               # Enable collision detection
+      costmap_topic: "local_costmap/costmap_raw"
+      footprint_topic: "local_costmap/published_footprint"
+      transform_tolerance: 1.0                    # TF tolerance (s)
+      projection_time: 5.0                        # Projection time for collision (s)
+      simulation_step: 0.1                        # Simulation step (s)
+      dock_collision_threshold: 0.3               # Collision threshold (m)
+
+# ==============================================================================
+# Lifecycle Manager (Navigation)
+# ==============================================================================
+lifecycle_manager_navigation:
+  ros__parameters:
+    bond_timeout: 0.0
+
+# ==============================================================================
+# Loopback Simulator (for testing without real robot)
+# ==============================================================================
+loopback_simulator:
+  ros__parameters:
+    base_frame_id: "base_link"
+    odom_frame_id: "odom"
+    map_frame_id: "map"
+    scan_frame_id: "base_link/lidar_link"
+    update_duration: 0.02  # Update rate (s)

@@ -1,4 +1,4 @@
-name: navstack
+name: navstack_minimal
 root: ~/nav_ws
 pre_window: ./container shell
 
@@ -6,7 +6,7 @@ pre_window: ./container shell
 # - Uses ~/nav_ws/maps/final/current_nav.yaml when present
 # - Falls back to the previous packaged map if no current_nav exists yet
 # Override per launch:
-#   cd ~/nav_ws/tmux/navstack
+#   cd ~/nav_ws/tmux/navstack_minimal
 #   NAVSTACK_MAP=/home/ros/nav_ws/maps/final/my_map.yaml tmuxinator local
 #   NAVSTACK_MAP=my_map tmuxinator local
 windows:
@@ -16,18 +16,15 @@ windows:
         - #ros2 run spot_nav soft_stop
         - ros2 launch spot_driver spot_driver.launch.py config_file:=/home/ros/nav_ws/params/spot_driver.yaml
         - ros2 launch ironback_description description.launch.py
-        - ros2 launch azure_kinect_ros_driver driver.launch.py depth_mode:=NFOV_UNBINNED color_resolution:=720P fps:=30
-        # - sleep 15; ros2 launch spot_nav navigation.launch.py launch_driver:=False spot_config_file:=/home/ros/nav_ws/params/spot_driver.yaml map:=2026-04-04_speedway_apr4_4pm_lio_sam_nav scan_topic:=/mapping/scan/nav
+        #- ros2 launch azure_kinect_ros_driver driver.launch.py depth_mode:=NFOV_UNBINNED color_resolution:=720P fps:=30
         - sleep 15; ros2 launch spot_nav navigation.launch.py launch_driver:=False spot_config_file:=/home/ros/nav_ws/params/spot_driver.yaml map:=/home/ros/nav_ws/maps/final/2026-04-04_speedway_apr4_4pm_lio_sam_nav-modified_black.yaml scan_topic:=/mapping/scan/nav
-        # - sleep 15; ros2 launch spot_nav navigation.launch.py launch_driver:=False spot_config_file:=/home/ros/nav_ws/params/spot_driver.yaml map:=/home/ros/nav_ws/src/spot_nav/spot_nav2/spot_nav/mapsahg_home_Feb12.pgm scan_topic:=/mapping/scan/nav
-
-        - ros2 launch hdl_people_tracking hdl_people_tracking.launch.py
+       # - ros2 launch hdl_people_tracking hdl_people_tracking.launch.py
         - ros2 launch spot_velodyne velodyne.launch.py device_ip:=192.168.50.201
         - 'ros2 launch spot_joy teleop.launch.py verbose:=true joy_dev:="${JOY_DEV:-/dev/input/ps4_primary}"'
         - # teleop stack launched above (joy_node + teleop_node)
         - vnc
-        # - ros2 launch spot_eye_animation eye_animation.launch.py 
-        - ros2 launch social_nav_policy social_nav_policy_launch.py publish_debug:=true log_level:=debug vlm_endpoint:=http://127.0.0.1:8000/v1/chat/completions vlm_model_name:=socialnav
-        - ros2 launch social_nav_policy social_nav_costmap_launch.py log_level:=debug
+        #- ros2 launch spot_eye_animation eye_animation.launch.py 
+        #- ros2 launch social_nav_policy social_nav_policy_launch.py publish_debug:=true log_level:=debug vlm_endpoint:=http://127.0.0.1:8000/v1/chat/completions vlm_model_name:=socialnav
+        # ros2 launch social_nav_policy social_nav_costmap_launch.py log_level:=debug
         - sleep 10; DISPLAY=:9 rviz2 -d rviz2/navstack.rviz
-        - ros2 run av_recorder bag_recorder
+       #  - ros2 run av_recorder bag_recorder

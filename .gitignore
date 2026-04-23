@@ -40,7 +40,12 @@ data/
 maps/
 !maps/.gitkeep
 
-# External source clones — managed via repos/*.repos, not committed directly
+# Qwen3 runtime and virtual environment
+.qwen3_runtime/
+.qwen3_vl_venv/
+.codex
+
+# all copied repos that contain their own .git
 # (each has its own .git inside)
 src/LI_ORF/
 src/LiDAR_IMU_Init/
@@ -62,8 +67,3 @@ src/spot_nav/
 src/vlm_policy/
 src/tl_expected/
 src/vendor/
-
-# Qwen3 runtime and virtual environment
-.qwen3_runtime/
-.qwen3_vl_venv/
-.codex

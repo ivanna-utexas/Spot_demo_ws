@@ -256,6 +256,8 @@ RUN apt-get update && apt-get install -y \
     ros-${ros_distro}-velodyne \
     ros-${ros_distro}-image-transport \
     ros-${ros_distro}-image-transport-plugins \
+    ros-${ros_distro}-rosbridge-server \
+    ros-${ros_distro}-rosbag2-storage-mcap \
     && rm -rf /var/lib/apt/lists/*
 
 # Serial dependencies
