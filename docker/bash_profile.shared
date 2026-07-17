@@ -11,9 +11,9 @@ for dir in $HOME/*/; do
     fi
 done
 
-# Fallback to nav_ws if not detected
+# Fallback to dance_ws_pedestrian_tracking if not detected
 if [ -z "$WORKSPACE_NAME" ]; then
-    export WORKSPACE_NAME=nav_ws
+    export WORKSPACE_NAME=dance_ws_pedestrian_tracking
 fi
 
 # PyTorch

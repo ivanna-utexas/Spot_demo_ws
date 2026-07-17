@@ -46,7 +46,7 @@ def generate_launch_description():
     )
     declare_extrinsics = DeclareLaunchArgument(
         'extrinsics_file',
-        default_value=os.path.expanduser('~/nav_ws/config/mapping/extrinsics.yaml'),
+        default_value=os.path.expanduser('~/dance_ws_pedestrian_tracking/config/mapping/extrinsics.yaml'),
         description='Path to canonical extrinsics YAML'
     )
     declare_scan_frame = DeclareLaunchArgument(

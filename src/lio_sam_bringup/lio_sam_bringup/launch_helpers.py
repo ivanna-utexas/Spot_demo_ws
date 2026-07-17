@@ -11,7 +11,7 @@ from .calibration import (
 
 
 def workspace_root():
-    return os.path.expanduser('~/nav_ws')
+    return os.path.expanduser('~/dance_ws_pedestrian_tracking')
 
 
 def package_share():

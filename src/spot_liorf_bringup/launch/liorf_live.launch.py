@@ -84,7 +84,7 @@ def load_extrinsics(path):
 
 
 def generate_launch_description():
-    ws_root = os.path.expanduser('~/nav_ws')
+    ws_root = os.path.expanduser('~/dance_ws_pedestrian_tracking')
     extrinsics_path = os.path.join(ws_root, 'config', 'mapping', 'extrinsics.yaml')
     liorf_config = os.path.join(ws_root, 'config', 'liorf', 'liorf_spot_vlp16.yaml')
 

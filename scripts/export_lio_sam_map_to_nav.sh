@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-WS_ROOT="${HOME}/nav_ws"
+WS_ROOT="${HOME}/dance_ws_pedestrian_tracking"
 SAVE_RESOLUTION="0.0"
 GRID_RESOLUTION="0.05"
 HEIGHT_MIN="-0.10"
@@ -130,7 +130,7 @@ mkdir -p "${ALIGNED_DIR}" "${CLEANED_DIR}" "${PROJECTED_DIR}" "${WS_ROOT}/maps/f
 
 echo "Saving LIO-SAM map to ${RAW_DIR}"
 ros2 service call /lio_sam/save_map lio_sam/srv/SaveMap \
-  "{resolution: ${SAVE_RESOLUTION}, destination: '/nav_ws/maps/lio_sam/raw/${MAP_NAME}'}"
+  "{resolution: ${SAVE_RESOLUTION}, destination: '/dance_ws_pedestrian_tracking/maps/lio_sam/raw/${MAP_NAME}'}"
 
 if [ ! -f "${RAW_DIR}/GlobalMap.pcd" ]; then
     echo "Expected LIO-SAM save output not found: ${RAW_DIR}/GlobalMap.pcd" >&2

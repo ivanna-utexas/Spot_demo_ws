@@ -6,7 +6,7 @@
   <description>Backend-neutral mapping infrastructure for lidar-inertial SLAM.
   Includes pointcloud validation, Spot and generic IMU normalization, TF-aware scan extraction,
   and shared launch fragments.</description>
-  <maintainer email="todo@example.com">nav_ws</maintainer>
+  <maintainer email="todo@example.com">dance_ws_pedestrian_tracking</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_python</buildtool_depend>

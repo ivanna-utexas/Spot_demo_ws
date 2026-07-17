@@ -6,7 +6,7 @@ set -eo pipefail
 
 NAME=""
 ESTIMATE_GB=25
-WS_ROOT="${HOME}/nav_ws"
+WS_ROOT="${HOME}/dance_ws_pedestrian_tracking"
 
 # Source ROS env with -u disabled (Humble's setup.bash uses unbound vars)
 set +u

@@ -31,7 +31,7 @@
 
     # --- Save PCD ---
     savePCD: true
-    savePCDDirectory: "/nav_ws/maps/liorf/raw/"
+    savePCDDirectory: "/dance_ws_pedestrian_tracking/maps/liorf/raw/"
 
     # --- Lidar Settings (VLP-16) ---
     sensor: velodyne           # velodyne, ouster, livox, robosense

@@ -22,7 +22,7 @@ class TimingMonitorNode(Node):
         self.declare_parameter('imu_topic', '/imu/data')
         self.declare_parameter(
             'extrinsics_file',
-            '/home/ros/nav_ws/config/mapping/extrinsics.yaml',
+            '/home/ros/dance_ws_pedestrian_tracking/config/mapping/extrinsics.yaml',
         )
         self.declare_parameter('expected_offset_sec', float('nan'))
         self.declare_parameter('sample_window', 1000)

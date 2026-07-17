@@ -1,5 +1,5 @@
 name: debug
-root: ~/nav_ws
+root: ~/dance_ws_pedestrian_tracking
 pre_window: ./container shell
 
 windows:
@@ -8,10 +8,10 @@ windows:
       panes:
         -
         - ros2 run tf2_ros static_transform_publisher 0 0 0.5 0 0 0 body velodyne
-        - ros2 launch spot_driver spot_driver.launch.py config_file:=$HOME/nav_ws/params/spot_driver.yaml
-        - ros2 launch slam_toolbox online_async_launch.py slam_params_file:=$HOME/nav_ws/params/slam_toolbox_online.yaml
+        - ros2 launch spot_driver spot_driver.launch.py config_file:=$HOME/dance_ws_pedestrian_tracking/params/spot_driver.yaml
+        - ros2 launch slam_toolbox online_async_launch.py slam_params_file:=$HOME/dance_ws_pedestrian_tracking/params/slam_toolbox_online.yaml
         - sleep 3 && $HOME/masa_ws/record_tasks.sh
-        - ros2 launch slam_toolbox online_async_launch.py slam_params_file:=$HOME/nav_ws/params/slam_toolbox_online.yaml use_sim_time:=false
+        - ros2 launch slam_toolbox online_async_launch.py slam_params_file:=$HOME/dance_ws_pedestrian_tracking/params/slam_toolbox_online.yaml use_sim_time:=false
         - ros2 launch spot_velodyne velodyne.launch.py
         - ros2 topic hz /scan
         # - ros2 launch foxglove_bridge foxglove_bridge_launch.xml
@@ -19,5 +19,5 @@ windows:
         - 'ros2 launch spot_joy teleop.launch.py verbose:=true joy_dev:="${JOY_DEV:-/dev/input/ps4_primary}"'
         - # teleop stack launched above (joy_node + teleop_node)
           # - 
-          #  - cd ../cotnav_ws
+          #  - cd ../cotdance_ws_pedestrian_tracking
           # - ./container cmd 'ros2 launch super_odometry vlp_16.launch.py'

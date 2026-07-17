@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-WS_ROOT="${HOME}/nav_ws"
+WS_ROOT="${HOME}/dance_ws_pedestrian_tracking"
 SAVE_RESOLUTION="0.0"
 GRID_RESOLUTION="0.05"
 HEIGHT_MIN="-0.10"
@@ -144,7 +144,7 @@ mkdir -p "${ALIGNED_DIR}" "${CLEANED_DIR}" "${PROJECTED_DIR}" "${WS_ROOT}/maps/f
 
 echo "Saving LiORF map to ${RAW_DIR}"
 ros2 service call /liorf/save_map liorf/srv/SaveMap \
-  "{resolution: ${SAVE_RESOLUTION}, destination: '/nav_ws/maps/liorf/raw/${MAP_NAME}'}"
+  "{resolution: ${SAVE_RESOLUTION}, destination: '/dance_ws_pedestrian_tracking/maps/liorf/raw/${MAP_NAME}'}"
 
 if [ ! -f "${RAW_DIR}/GlobalMap.pcd" ]; then
     echo "Expected LiORF save output not found: ${RAW_DIR}/GlobalMap.pcd" >&2

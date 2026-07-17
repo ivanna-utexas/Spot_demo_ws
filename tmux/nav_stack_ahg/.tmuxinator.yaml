@@ -1,23 +1,23 @@
 name: navstack
-root: ~/nav_ws
+root: ~/dance_ws_pedestrian_tracking
 pre_window: ./container shell
 
 # Default map selection:
-# - Uses ~/nav_ws/maps/final/current_nav.yaml when present
+# - Uses ~/dance_ws_pedestrian_tracking/maps/final/current_nav.yaml when present
 # - Falls back to the previous packaged map if no current_nav exists yet
 # Override per launch:
-#   cd ~/nav_ws/tmux/navstack
-#   NAVSTACK_MAP=/home/ros/nav_ws/maps/final/my_map.yaml tmuxinator local
+#   cd ~/dance_ws_pedestrian_tracking/tmux/navstack
+#   NAVSTACK_MAP=/home/ros/dance_ws_pedestrian_tracking/maps/final/my_map.yaml tmuxinator local
 #   NAVSTACK_MAP=my_map tmuxinator local
 windows:
   - simulator:
       layout: main-vertical
       panes:
         - #ros2 run spot_nav soft_stop
-        - ros2 launch spot_driver spot_driver.launch.py config_file:=/home/ros/nav_ws/params/spot_driver.yaml
+        - ros2 launch spot_driver spot_driver.launch.py config_file:=/home/ros/dance_ws_pedestrian_tracking/params/spot_driver.yaml
         - ros2 launch ironback_description description.launch.py
         # - ros2 launch azure_kinect_ros_driver driver.launch.py depth_mode:=NFOV_UNBINNED color_resolution:=720P fps:=30
-        # - sleep 15; ros2 launch spot_nav navigation.launch.py launch_driver:=False spot_config_file:=/home/ros/nav_ws/params/spot_driver.yaml map:=2026-04-04_speedway_apr4_4pm_lio_sam_nav scan_topic:=/mapping/scan/nav
+        # - sleep 15; ros2 launch spot_nav navigation.launch.py launch_driver:=False spot_config_file:=/home/ros/dance_ws_pedestrian_tracking/params/spot_driver.yaml map:=2026-04-04_speedway_apr4_4pm_lio_sam_nav scan_topic:=/mapping/scan/nav
         - sleep 15; ros2 launch spot_nav navigation.launch.py launch_driver:=False map:=ahg_home_Feb12
         - ros2 launch hdl_people_tracking hdl_people_tracking.launch.py
         - ros2 launch spot_velodyne velodyne.launch.py device_ip:=192.168.50.201

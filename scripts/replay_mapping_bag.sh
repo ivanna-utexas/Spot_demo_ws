@@ -22,7 +22,7 @@ BACKEND="liorf"
 POINTCLOUD_TOPIC=""
 IMU_INPUT_TOPIC=""
 PACKET_TOPIC=""
-WS_ROOT="${HOME}/nav_ws"
+WS_ROOT="${HOME}/dance_ws_pedestrian_tracking"
 PLAY_QOS_OVERRIDES=""
 
 while [[ $# -gt 0 ]]; do

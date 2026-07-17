@@ -32,7 +32,7 @@ def _static_tf_node(name, parent_frame, child_frame, transform, condition=None):
 
 
 def generate_launch_description():
-    ws_root = os.path.expanduser('~/nav_ws')
+    ws_root = os.path.expanduser('~/dance_ws_pedestrian_tracking')
     extrinsics_path = os.path.join(ws_root, 'config', 'mapping', 'extrinsics.yaml')
     lio_sam_config = os.path.join(ws_root, 'config', 'lio_sam', 'lio_sam_vn100_vlp16.yaml')
     vectornav_config = os.path.join(ws_root, 'config', 'lio_sam', 'vectornav_vn100.yaml')

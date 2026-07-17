@@ -58,7 +58,7 @@ You need to tell your laptop where the robot is.
 1.  **Create a `config/spot_ip` file** (Recommended):
     Create a file named `spot_ip` in the `config/` directory and paste the robot's IP address into it.
     ```bash
-    echo "192.168.86.XX" > ~/nav_ws/config/spot_ip
+    echo "192.168.86.XX" > ~/dance_ws_pedestrian_tracking/config/spot_ip
     ```
     The `container` script will read this file and automatically export `SPOT_IP` into the container.
 
@@ -129,17 +129,17 @@ Recommended build flow:
 ```bash
 ./container build
 ./container start
-./container cmd 'source /opt/ros/humble/setup.bash && cd /home/ros/nav_ws && colcon build --packages-select sophus_vendor gtsam_vendor --executor sequential --parallel-workers 1'
-./container cmd 'source /opt/ros/humble/setup.bash && cd /home/ros/nav_ws && colcon build --packages-up-to spot_nav'
+./container cmd 'source /opt/ros/humble/setup.bash && cd /home/ros/dance_ws_pedestrian_tracking && colcon build --packages-select sophus_vendor gtsam_vendor --executor sequential --parallel-workers 1'
+./container cmd 'source /opt/ros/humble/setup.bash && cd /home/ros/dance_ws_pedestrian_tracking && colcon build --packages-up-to spot_nav'
 ```
 
 Supported launch commands:
 
 ```bash
-./container cmd 'source /opt/ros/humble/setup.bash && source /home/ros/nav_ws/install/setup.bash && ros2 launch spot_nav spot_mapping.launch.py'
-./container cmd 'source /opt/ros/humble/setup.bash && source /home/ros/nav_ws/install/setup.bash && ros2 launch super_odometry vlp_16.launch.py'
-./container cmd 'source /opt/ros/humble/setup.bash && source /home/ros/nav_ws/install/setup.bash && ros2 launch super_odometry livox_mid360.launch.py'
-./container cmd 'source /opt/ros/humble/setup.bash && source /home/ros/nav_ws/install/setup.bash && ros2 launch super_odometry os1_128.launch.py'
+./container cmd 'source /opt/ros/humble/setup.bash && source /home/ros/dance_ws_pedestrian_tracking/install/setup.bash && ros2 launch spot_nav spot_mapping.launch.py'
+./container cmd 'source /opt/ros/humble/setup.bash && source /home/ros/dance_ws_pedestrian_tracking/install/setup.bash && ros2 launch super_odometry vlp_16.launch.py'
+./container cmd 'source /opt/ros/humble/setup.bash && source /home/ros/dance_ws_pedestrian_tracking/install/setup.bash && ros2 launch super_odometry livox_mid360.launch.py'
+./container cmd 'source /opt/ros/humble/setup.bash && source /home/ros/dance_ws_pedestrian_tracking/install/setup.bash && ros2 launch super_odometry os1_128.launch.py'
 ```
 
-Default SuperOdom artifacts live under `/home/ros/nav_ws/maps/superodom/` inside the container, which persists because the workspace root is bind-mounted by `./container`.
+Default SuperOdom artifacts live under `/home/ros/dance_ws_pedestrian_tracking/maps/superodom/` inside the container, which persists because the workspace root is bind-mounted by `./container`.

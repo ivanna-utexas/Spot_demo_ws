@@ -1,5 +1,5 @@
 name: liorf_replay
-root: ~/nav_ws
+root: ~/dance_ws_pedestrian_tracking
 pre_window: ./container shell
 
 windows:
@@ -13,9 +13,9 @@ windows:
         # 2: Static map → odom TF (liorf ros2 fork does not publish it)
         - sleep 2; ros2 run tf2_ros static_transform_publisher 0 0 0 0 0 0 map odom
         # 3: LiORF replay (mapping_common + SLAM nodes)
-        - sleep 5; source $HOME/nav_ws/scripts/liorf_env.sh && ros2 launch spot_liorf_bringup liorf_replay.launch.py imu_input_topic:=/imu
+        - sleep 5; source $HOME/dance_ws_pedestrian_tracking/scripts/liorf_env.sh && ros2 launch spot_liorf_bringup liorf_replay.launch.py imu_input_topic:=/imu
         # 4: Bag playback
-        - sleep 10; ros2 bag play $HOME/nav_ws/bags/slam-test-bags/2026-03-27_13-54-36 --clock
+        - sleep 10; ros2 bag play $HOME/dance_ws_pedestrian_tracking/bags/slam-test-bags/2026-03-27_13-54-36 --clock
         # 5: Monitor liorf odometry
         - ros2 topic hz /liorf/mapping/odometry --use-sim-time
         # 6: Monitor IMU adapter
@@ -23,4 +23,4 @@ windows:
         # 7: VNC for RViz
         - vnc
         # 8: RViz2
-        - sleep 15; DISPLAY=:9 rviz2 -d $HOME/nav_ws/src/LI_ORF/rviz/mapping.rviz --ros-args -p use_sim_time:=true
+        - sleep 15; DISPLAY=:9 rviz2 -d $HOME/dance_ws_pedestrian_tracking/src/LI_ORF/rviz/mapping.rviz --ros-args -p use_sim_time:=true

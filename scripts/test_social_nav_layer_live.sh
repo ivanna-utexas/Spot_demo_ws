@@ -5,20 +5,20 @@
 #
 # Usage (inside container):
 #   # Terminal 1: start the VLM pipeline
-#   cd ~/nav_ws/tmux/vlm && tmuxinator start
+#   cd ~/dance_ws_pedestrian_tracking/tmux/vlm && tmuxinator start
 #
 #   # Terminal 2: run this script
 #   ./container shell
-#   /home/ros/nav_ws/scripts/test_social_nav_layer_live.sh
+#   /home/ros/dance_ws_pedestrian_tracking/scripts/test_social_nav_layer_live.sh
 #
 # View in RViz: Fixed Frame = map, add Map display on /costmap/costmap
 
 set -e
 
-NAV_WS=/home/ros/nav_ws
+dance_ws_pedestrian_tracking=/home/ros/dance_ws_pedestrian_tracking
 
 source /opt/ros/humble/setup.bash
-source ${NAV_WS}/install/setup.bash
+source ${dance_ws_pedestrian_tracking}/install/setup.bash
 
 PIDS=()
 cleanup() {
@@ -41,7 +41,7 @@ if pgrep -f nav2_costmap_2d > /dev/null; then
 fi
 
 echo "[test] Verifying plugin is installed..."
-PLUGIN_XML=${NAV_WS}/install/social_nav_costmap_layer/share/social_nav_costmap_layer/social_nav_costmap_layer.xml
+PLUGIN_XML=${dance_ws_pedestrian_tracking}/install/social_nav_costmap_layer/share/social_nav_costmap_layer/social_nav_costmap_layer.xml
 if [ ! -f "${PLUGIN_XML}" ]; then
   echo "[test] ERROR: plugin XML not found. Build with:"
   echo "       colcon build --packages-select social_nav_costmap_layer"
@@ -56,7 +56,7 @@ if echo "${TOPIC_INFO}" | grep -qE "Publisher count: [1-9]"; then
 else
   echo "[test] WARNING: nobody publishing /social_nav/ped_actions yet."
   echo "[test] Start the vlm tmux session in another terminal:"
-  echo "       cd ~/nav_ws/tmux/vlm && tmuxinator start"
+  echo "       cd ~/dance_ws_pedestrian_tracking/tmux/vlm && tmuxinator start"
   echo "[test] Continuing — costmap will stay blank until data arrives."
 fi
 

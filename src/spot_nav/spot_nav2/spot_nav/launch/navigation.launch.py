@@ -10,7 +10,7 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 DEFAULT_SCAN_TOPIC = '/mapping/scan/nav'
-DEFAULT_EXTRINSICS_FILE = os.path.expanduser('~/nav_ws/config/mapping/extrinsics.yaml')
+DEFAULT_EXTRINSICS_FILE = os.path.expanduser('~/dance_ws_pedestrian_tracking/config/mapping/extrinsics.yaml')
 
 
 def resolve_map_yaml(map_value, package_share_dir):

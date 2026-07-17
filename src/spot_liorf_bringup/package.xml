@@ -6,7 +6,7 @@
   <description>Candidate-specific bringup for LiORF SLAM backend on Spot.
   Wraps liorf with Spot-specific configuration, extrinsics loading, and
   replay launch files.</description>
-  <maintainer email="todo@example.com">nav_ws</maintainer>
+  <maintainer email="todo@example.com">dance_ws_pedestrian_tracking</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

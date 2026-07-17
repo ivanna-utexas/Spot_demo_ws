@@ -1,5 +1,5 @@
 name: lio_sam_saved_map
-root: ~/nav_ws
+root: ~/dance_ws_pedestrian_tracking
 pre_window: '[ -n "$IN_CONTAINER_NAME" ] || ./container shell'
 
 # Visualize a saved LIO-SAM map in RViz over VNC.
@@ -8,16 +8,16 @@ pre_window: '[ -n "$IN_CONTAINER_NAME" ] || ./container shell'
 #   maps/lio_sam/2026-04-04_debug_local_degradation-speedway-Apr4-4pm-speedway
 #
 # Examples:
-#   cd ~/nav_ws/tmux/lio-sam-saved-map
+#   cd ~/dance_ws_pedestrian_tracking/tmux/lio-sam-saved-map
 #   tmuxinator local
 #
-#   cd ~/nav_ws/tmux/lio-sam-saved-map
-#   LIO_SAM_SAVED_MAP_DIR=$HOME/nav_ws/maps/lio_sam/2026-04-04_debug_local_degradation-speedway-Apr4-4pm-speedway \
+#   cd ~/dance_ws_pedestrian_tracking/tmux/lio-sam-saved-map
+#   LIO_SAM_SAVED_MAP_DIR=$HOME/dance_ws_pedestrian_tracking/maps/lio_sam/2026-04-04_debug_local_degradation-speedway-Apr4-4pm-speedway \
 #   tmuxinator local
 #
-#   cd ~/nav_ws/tmux/lio-sam-saved-map
-#   LIO_SAM_SAVED_MAP_PCD=$HOME/nav_ws/maps/lio_sam/my_run/cloudGlobal.pcd \
-#   LIO_SAM_SAVED_TRAJECTORY_PCD=$HOME/nav_ws/maps/lio_sam/my_run/trajectory.pcd \
+#   cd ~/dance_ws_pedestrian_tracking/tmux/lio-sam-saved-map
+#   LIO_SAM_SAVED_MAP_PCD=$HOME/dance_ws_pedestrian_tracking/maps/lio_sam/my_run/cloudGlobal.pcd \
+#   LIO_SAM_SAVED_TRAJECTORY_PCD=$HOME/dance_ws_pedestrian_tracking/maps/lio_sam/my_run/trajectory.pcd \
 #   tmuxinator local
 windows:
   - saved_map:
@@ -30,8 +30,8 @@ windows:
         # 2: Saved-map publishers + RViz on the VNC display
         - >
           sleep 8;
-          source $HOME/nav_ws/install/setup.bash &&
-          export LIO_SAM_SAVED_MAP_DIR=${LIO_SAM_SAVED_MAP_DIR:-$HOME/nav_ws/maps/lio_sam/2026-04-04_debug_local_degradation-speedway-Apr4-4pm-speedway} &&
+          source $HOME/dance_ws_pedestrian_tracking/install/setup.bash &&
+          export LIO_SAM_SAVED_MAP_DIR=${LIO_SAM_SAVED_MAP_DIR:-$HOME/dance_ws_pedestrian_tracking/maps/lio_sam/2026-04-04_debug_local_degradation-speedway-Apr4-4pm-speedway} &&
           DISPLAY=:9 ros2 launch lio_sam_bringup lio_sam_saved_map_viz.launch.py
           map_pcd:=${LIO_SAM_SAVED_MAP_PCD:-${LIO_SAM_SAVED_MAP_DIR}/cloudGlobal.pcd}
           trajectory_pcd:=${LIO_SAM_SAVED_TRAJECTORY_PCD:-${LIO_SAM_SAVED_MAP_DIR}/trajectory.pcd}

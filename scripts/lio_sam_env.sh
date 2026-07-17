@@ -2,7 +2,7 @@
 # lio_sam_env.sh — Candidate-specific environment for the ROS 2 LIO-SAM flow.
 set -euo pipefail
 
-WS_ROOT="${HOME}/nav_ws"
+WS_ROOT="${HOME}/dance_ws_pedestrian_tracking"
 
 source_setup_file() {
     local setup_file="$1"

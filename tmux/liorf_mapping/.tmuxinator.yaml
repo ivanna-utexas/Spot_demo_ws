@@ -1,9 +1,9 @@
 name: liorf_mapping
-root: ~/nav_ws
+root: ~/dance_ws_pedestrian_tracking
 pre_window: ./container shell
 
 # Launch-time topic overrides are read from the environment. Example:
-#   cd ~/nav_ws/tmux/liorf_mapping
+#   cd ~/dance_ws_pedestrian_tracking/tmux/liorf_mapping
 #   LIORF_POINTCLOUD_TOPIC=/velodyne_points \
 #   LIORF_IMU_INPUT_TOPIC=/imu/data \
 #   LIORF_RVIZ_SCAN_TOPIC=/liorf/mapping/cloud_registered_raw \
@@ -16,11 +16,11 @@ windows:
         # 0: Shell for ad-hoc commands
         -
         # 1: Spot driver with IMU streaming
-        - ros2 launch spot_driver spot_driver.launch.py config_file:=$HOME/nav_ws/params/spot_driver.yaml launch_image_publishers:=false enable_streaming_imu_publisher:=true
+        - ros2 launch spot_driver spot_driver.launch.py config_file:=$HOME/dance_ws_pedestrian_tracking/params/spot_driver.yaml launch_image_publishers:=false enable_streaming_imu_publisher:=true
         # 2: Static map → odom TF (liorf ros2 fork does not publish it)
         - sleep 5; ros2 run tf2_ros static_transform_publisher 0 0 0 0 0 0 map odom
         # 3: LiORF live mapping (includes canonical body → velodyne TF)
-        - sleep 8; source $HOME/nav_ws/scripts/liorf_env.sh && ros2 launch spot_liorf_bringup liorf_live.launch.py device_ip:=${LIORF_DEVICE_IP:-192.168.50.201} imu_mode:=${LIORF_IMU_MODE:-six_axis} pointcloud_topic:=${LIORF_POINTCLOUD_TOPIC:-/velodyne_points} imu_input_topic:=${LIORF_IMU_INPUT_TOPIC:-/imu/data} imu_output_topic:=${LIORF_IMU_OUTPUT_TOPIC:-/mapping/imu} scan_output_topic:=${LIORF_SCAN_OUTPUT_TOPIC:-/mapping/scan/nav}
+        - sleep 8; source $HOME/dance_ws_pedestrian_tracking/scripts/liorf_env.sh && ros2 launch spot_liorf_bringup liorf_live.launch.py device_ip:=${LIORF_DEVICE_IP:-192.168.50.201} imu_mode:=${LIORF_IMU_MODE:-six_axis} pointcloud_topic:=${LIORF_POINTCLOUD_TOPIC:-/velodyne_points} imu_input_topic:=${LIORF_IMU_INPUT_TOPIC:-/imu/data} imu_output_topic:=${LIORF_IMU_OUTPUT_TOPIC:-/mapping/imu} scan_output_topic:=${LIORF_SCAN_OUTPUT_TOPIC:-/mapping/scan/nav}
         # 4: Monitor lidar rate
         - ros2 topic hz ${LIORF_POINTCLOUD_TOPIC:-/velodyne_points}
         # 5: Monitor IMU adapter output
@@ -30,7 +30,7 @@ windows:
         # 7: VNC for RViz
         - vnc
         # 8: RViz2
-        - sleep 20; source $HOME/nav_ws/scripts/liorf_env.sh && RVIZ_CFG=$($HOME/nav_ws/scripts/render_liorf_rviz_config.sh) && DISPLAY=:9 rviz2 -d "$RVIZ_CFG"
+        - sleep 20; source $HOME/dance_ws_pedestrian_tracking/scripts/liorf_env.sh && RVIZ_CFG=$($HOME/dance_ws_pedestrian_tracking/scripts/render_liorf_rviz_config.sh) && DISPLAY=:9 rviz2 -d "$RVIZ_CFG"
         # 9: Joy teleop
         - ros2 run joy joy_node
         - ros2 run spot_joy teleop_node --ros-args -p verbose:=true

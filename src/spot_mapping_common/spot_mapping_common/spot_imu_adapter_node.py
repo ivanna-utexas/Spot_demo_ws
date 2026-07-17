@@ -31,7 +31,7 @@ class SpotImuAdapterNode(Node):
         self.declare_parameter('input_topic', '/imu/data')
         self.declare_parameter('output_topic', '/mapping/imu')
         self.declare_parameter('extrinsics_file',
-                               os.path.expanduser('~/nav_ws/config/mapping/extrinsics.yaml'))
+                               os.path.expanduser('~/dance_ws_pedestrian_tracking/config/mapping/extrinsics.yaml'))
         self.declare_parameter('expected_rate_hz', 200.0)
         self.declare_parameter('gravity_nominal', 9.81)
         self.declare_parameter('gravity_tolerance', 0.3)

@@ -16,7 +16,7 @@
     poseCovThreshold: 25.0
 
     savePCD: false
-    savePCDDirectory: "/home/ros/nav_ws/maps/lio_sam/raw/"
+    savePCDDirectory: "/home/ros/dance_ws_pedestrian_tracking/maps/lio_sam/raw/"
 
     sensor: "velodyne"
     N_SCAN: 16

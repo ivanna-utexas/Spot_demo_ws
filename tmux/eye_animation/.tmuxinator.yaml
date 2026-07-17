@@ -1,5 +1,5 @@
 name: eye_animation
-root: ~/nav_ws
+root: ~/dance_ws_pedestrian_tracking
 
 windows:
   - eye_animation:

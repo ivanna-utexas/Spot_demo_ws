@@ -1,5 +1,5 @@
 name: navstack
-root: ~/nav_ws
+root: ~/dance_ws_pedestrian_tracking
 
 windows:
   - simulator:

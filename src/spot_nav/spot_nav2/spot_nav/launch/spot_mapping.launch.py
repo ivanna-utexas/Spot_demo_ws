@@ -53,7 +53,7 @@ def generate_launch_description():
     )
     declare_map_pcd = DeclareLaunchArgument(
         "map_pcd",
-        default_value="/home/ros/nav_ws/maps/superodom/pointcloud_local.pcd",
+        default_value="/home/ros/dance_ws_pedestrian_tracking/maps/superodom/pointcloud_local.pcd",
         description="Path to the localization pointcloud PCD file.",
     )
     declare_world_frame = DeclareLaunchArgument(

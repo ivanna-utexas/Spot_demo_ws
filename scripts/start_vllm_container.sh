@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-WORKSPACE_ROOT="${WORKSPACE_ROOT:-/home/ros/nav_ws}"
+WORKSPACE_ROOT="${WORKSPACE_ROOT:-/home/ros/dance_ws_pedestrian_tracking}"
 MODEL_DIR="${MODEL_DIR:-${WORKSPACE_ROOT}/vlm_models/Qwen/Qwen3-VL-2B-Instruct}"
 HF_CACHE_DIR="${HF_CACHE_DIR:-${WORKSPACE_ROOT}/vlm_models/.hf-cache}"
 VLLM_IMAGE="${VLLM_IMAGE:-ghcr.io/nvidia-ai-iot/vllm:latest-jetson-orin}"

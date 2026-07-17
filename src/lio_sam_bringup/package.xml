@@ -4,7 +4,7 @@
   <name>lio_sam_bringup</name>
   <version>0.1.0</version>
   <description>Launch wrappers for the ROS 2 LIO-SAM backend used by the Nav2 mapping flow.</description>
-  <maintainer email="todo@example.com">nav_ws</maintainer>
+  <maintainer email="todo@example.com">dance_ws_pedestrian_tracking</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_python</buildtool_depend>

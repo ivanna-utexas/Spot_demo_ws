@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source_config="${LIORF_RVIZ_SOURCE_CONFIG:-$HOME/nav_ws/src/LI_ORF/rviz/mapping.rviz}"
+source_config="${LIORF_RVIZ_SOURCE_CONFIG:-$HOME/dance_ws_pedestrian_tracking/src/LI_ORF/rviz/mapping.rviz}"
 tmp_dir="${TMPDIR:-/tmp}"
 user_name="${USER:-}"
 if [ -z "$user_name" ]; then

@@ -8,7 +8,7 @@ from launch_ros.actions import Node
 
 
 def _resolve_default_map():
-    ws_map = os.path.expanduser('~/nav_ws/maps/final/current_nav.yaml')
+    ws_map = os.path.expanduser('~/dance_ws_pedestrian_tracking/maps/final/current_nav.yaml')
     if os.path.exists(ws_map):
         return ws_map
 

@@ -1,5 +1,5 @@
 name: ptv3
-root: ~/nav_ws
+root: ~/dance_ws_pedestrian_tracking
 
 windows:
   - ptv3:

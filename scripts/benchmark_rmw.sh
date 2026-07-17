@@ -12,7 +12,7 @@ echo "===== RMW Middleware Benchmark (Diagnostic Only) ====="
 echo "Production middleware: CycloneDDS (unchanged by this script)"
 echo ""
 
-WS_ROOT="${HOME}/nav_ws"
+WS_ROOT="${HOME}/dance_ws_pedestrian_tracking"
 
 # Check which RMW implementations are available
 echo "--- Available RMW implementations ---"

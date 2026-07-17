@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-WS_ROOT="${HOME}/nav_ws"
+WS_ROOT="${HOME}/dance_ws_pedestrian_tracking"
 FINAL_DIR="${WS_ROOT}/maps/final"
 SRC_NAV_MAP_DIR="${WS_ROOT}/src/spot_nav/spot_nav2/spot_nav/maps"
 INSTALL_NAV_MAP_DIR="${WS_ROOT}/install/spot_nav/share/spot_nav/maps"
@@ -13,12 +13,12 @@ Usage:
 
 Examples:
   scripts/use_nav_map.sh speedway_01
-  scripts/use_nav_map.sh ~/nav_ws/maps/final/speedway_01.yaml
+  scripts/use_nav_map.sh ~/dance_ws_pedestrian_tracking/maps/final/speedway_01.yaml
   scripts/use_nav_map.sh speedway_01 --launch
 
 What it does:
   1. Selects an existing 2D map (.yaml + .pgm)
-  2. Writes ~/nav_ws/maps/final/current_nav.yaml and current_nav.pgm
+  2. Writes ~/dance_ws_pedestrian_tracking/maps/final/current_nav.yaml and current_nav.pgm
   3. Copies the selected named map into spot_nav map folders when present
 
 After running this, tmux/navstack will use current_nav.yaml by default.
@@ -150,10 +150,10 @@ echo "Activated nav map: ${map_name}"
 echo "Current nav YAML: ${FINAL_DIR}/current_nav.yaml"
 echo
 echo "Launch navstack with:"
-echo "  cd ~/nav_ws/tmux/navstack && tmuxinator local"
+echo "  cd ~/dance_ws_pedestrian_tracking/tmux/navstack && tmuxinator local"
 echo
 echo "Override per session with:"
-echo "  cd ~/nav_ws/tmux/navstack && NAVSTACK_MAP=${map_name} tmuxinator local"
+echo "  cd ~/dance_ws_pedestrian_tracking/tmux/navstack && NAVSTACK_MAP=${map_name} tmuxinator local"
 
 if [ "${LAUNCH_NAVSTACK}" = "1" ]; then
     echo

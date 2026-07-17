@@ -86,7 +86,7 @@ if [[ -n "${ROS_DISCOVERY_SERVER:-}" ]]; then
 fi
 
 # ---------- 5. Bond library conflict ----------
-WS_ROOT="${HOME}/nav_ws"
+WS_ROOT="${HOME}/dance_ws_pedestrian_tracking"
 BOND_CONFLICT=0
 for pkg_dir in bond bondcpp bond_core test_bond smclib; do
     pkg_path="${WS_ROOT}/src/bond_core/${pkg_dir}"

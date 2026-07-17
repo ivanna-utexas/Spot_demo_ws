@@ -1,5 +1,5 @@
 name: superodom
-root: ~/nav_ws
+root: ~/dance_ws_pedestrian_tracking
 pre_window: ./container shell
 
 windows:
@@ -7,12 +7,12 @@ windows:
       layout: main-vertical
       panes:
         -
-        - ros2 launch spot_driver spot_driver.launch.py config_file:=$HOME/nav_ws/params/spot_driver.yaml launch_image_publishers:=false enable_streaming_imu_publisher:=true
+        - ros2 launch spot_driver spot_driver.launch.py config_file:=$HOME/dance_ws_pedestrian_tracking/params/spot_driver.yaml launch_image_publishers:=false enable_streaming_imu_publisher:=true
         - sleep 5; ros2 launch spot_nav spot_mapping.launch.py device_ip:=192.168.50.201 use_imu:=true imu_topic:=/imu/data
         - ros2 topic hz /odometry
         - ros2 topic hz /laser_odometry
         - ros2 topic hz /laser_cloud_map
         - vnc
-        - sleep 10; DISPLAY=:9 rviz2 -d $HOME/nav_ws/src/SuperOdom/super_odometry/config/ros2_baseline.rviz
+        - sleep 10; DISPLAY=:9 rviz2 -d $HOME/dance_ws_pedestrian_tracking/src/SuperOdom/super_odometry/config/ros2_baseline.rviz
         - ros2 run joy joy_node
         - ros2 run spot_joy teleop_node --ros-args -p verbose:=true

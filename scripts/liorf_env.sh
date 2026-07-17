@@ -3,12 +3,12 @@
 # global DDS env from bash_profile.shared and ensure CycloneDDS is correct.
 #
 # Usage (in tmuxinator pane):
-#   source ~/nav_ws/scripts/liorf_env.sh && <command>
+#   source ~/dance_ws_pedestrian_tracking/scripts/liorf_env.sh && <command>
 #
 # This file is candidate-specific: it sets env vars needed by liorf.
 # Backend-neutral env (DDS, workspace) is also re-asserted here so that
 # the liorf session doesn't inherit stale or wrong values.
-WS_ROOT="${HOME}/nav_ws"
+WS_ROOT="${HOME}/dance_ws_pedestrian_tracking"
 
 source_setup_file() {
     local setup_file="$1"

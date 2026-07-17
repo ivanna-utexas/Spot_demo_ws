@@ -13,7 +13,7 @@ from spot_mapping_common.calibration import load_mapping_calibration
 
 
 def generate_launch_description():
-    ws_root = os.path.expanduser('~/nav_ws')
+    ws_root = os.path.expanduser('~/dance_ws_pedestrian_tracking')
     extrinsics_path = os.path.join(ws_root, 'config', 'mapping', 'extrinsics.yaml')
     frames = load_mapping_calibration(extrinsics_path)['frames']
 

@@ -36,7 +36,7 @@ if [[ $# -lt 1 ]]; then
 fi
 
 RAW_BAG="$1"; shift
-WS_ROOT="${HOME}/nav_ws"
+WS_ROOT="${HOME}/dance_ws_pedestrian_tracking"
 OUTPUT=""
 
 while [[ $# -gt 0 ]]; do

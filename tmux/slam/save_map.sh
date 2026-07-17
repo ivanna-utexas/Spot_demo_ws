@@ -2,7 +2,7 @@
 
 read -p "Enter name for the new map: " map_name
 
-MAP_DIR="$HOME/nav_ws/src/spot_nav/spot_nav2/spot_nav/maps"
+MAP_DIR="$HOME/dance_ws_pedestrian_tracking/src/spot_nav/spot_nav2/spot_nav/maps"
 
 MAP_PATH="$MAP_DIR/$map_name"
 

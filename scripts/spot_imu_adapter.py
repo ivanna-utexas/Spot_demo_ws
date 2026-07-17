@@ -109,7 +109,7 @@ def main():
                         choices=['six_axis', 'corrected_quat'],
                         help='IMU output mode (default: six_axis)')
     parser.add_argument('--extrinsics',
-                        default=os.path.expanduser('~/nav_ws/config/mapping/extrinsics.yaml'),
+                        default=os.path.expanduser('~/dance_ws_pedestrian_tracking/config/mapping/extrinsics.yaml'),
                         help='Path to canonical extrinsics file')
     args, _ = parser.parse_known_args()
 

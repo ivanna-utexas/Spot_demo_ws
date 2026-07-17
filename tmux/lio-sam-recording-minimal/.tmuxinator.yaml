@@ -1,5 +1,5 @@
 name: lio_sam_recording_minimal
-root: ~/nav_ws
+root: ~/dance_ws_pedestrian_tracking
 pre_window: '[ -n "$IN_CONTAINER_NAME" ] || ./container shell'
 
 # Minimal raw capture for later offline LIO-SAM replay.
@@ -7,7 +7,7 @@ pre_window: '[ -n "$IN_CONTAINER_NAME" ] || ./container shell'
 # whether loss starts before or after the BEST_EFFORT relays.
 #
 # Example:
-#   cd ~/nav_ws/tmux/lio-sam-recording-minimal
+#   cd ~/dance_ws_pedestrian_tracking/tmux/lio-sam-recording-minimal
 #   LIO_SAM_RECORD_NAME=speedway_loop_01 \
 #   LIO_SAM_DEVICE_IP=192.168.50.201 \
 #   LIO_SAM_VELODYNE_RPM=1200.0 \
@@ -21,10 +21,10 @@ windows:
         - 
         - top -H -p $(pgrep -d, -f 'velodyne|component_container|vectornav|best_effort_topic_relay')
         - ros2 launch spot_velodyne velodyne.launch.py device_ip:=${LIO_SAM_DEVICE_IP:-192.168.50.201} rpm:=${LIO_SAM_VELODYNE_RPM:-600.0}
-        - sleep 2; ros2 run vectornav vectornav --ros-args -r __node:=vectornav --params-file $HOME/nav_ws/config/lio_sam/vectornav_vn100.yaml -p port:=${LIO_SAM_VECTORNAV_PORT:-/dev/ttyUSB0} -p baud:=${LIO_SAM_VECTORNAV_BAUD:-921600} -p frame_id:=imu_link
-        - sleep 4; ros2 run vectornav vn_sensor_msgs --ros-args -r __node:=vn_sensor_msgs --params-file $HOME/nav_ws/config/lio_sam/vectornav_vn100.yaml -r vectornav/imu:=/vectornav/imu_upstream -r /vectornav/imu:=/vectornav/imu_upstream
+        - sleep 2; ros2 run vectornav vectornav --ros-args -r __node:=vectornav --params-file $HOME/dance_ws_pedestrian_tracking/config/lio_sam/vectornav_vn100.yaml -p port:=${LIO_SAM_VECTORNAV_PORT:-/dev/ttyUSB0} -p baud:=${LIO_SAM_VECTORNAV_BAUD:-921600} -p frame_id:=imu_link
+        - sleep 4; ros2 run vectornav vn_sensor_msgs --ros-args -r __node:=vn_sensor_msgs --params-file $HOME/dance_ws_pedestrian_tracking/config/lio_sam/vectornav_vn100.yaml -r vectornav/imu:=/vectornav/imu_upstream -r /vectornav/imu:=/vectornav/imu_upstream
         - sleep 5; ros2 run spot_mapping_common best_effort_topic_relay_node --ros-args -r __node:=vectornav_imu_best_effort_relay -p input_topic:=/vectornav/imu_upstream -p output_topic:=/vectornav/imu -p message_type:=imu -p depth:=400
-        - sleep 8; $HOME/nav_ws/scripts/record_lio_sam_raw_bag.sh --name ${LIO_SAM_RECORD_NAME:-debug_local_degradation-speedway-Apr5-8pm-speedway} --estimate-gb ${LIO_SAM_ESTIMATE_GB:-10}
+        - sleep 8; $HOME/dance_ws_pedestrian_tracking/scripts/record_lio_sam_raw_bag.sh --name ${LIO_SAM_RECORD_NAME:-debug_local_degradation-speedway-Apr5-8pm-speedway} --estimate-gb ${LIO_SAM_ESTIMATE_GB:-10}
   - rates:
       layout: tiled
       panes:

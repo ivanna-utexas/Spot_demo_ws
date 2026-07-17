@@ -27,7 +27,7 @@
 
     # --- Save PCD ---
     savePCD: true
-    savePCDDirectory: "/nav_ws/maps/lio_sam/raw/"
+    savePCDDirectory: "/dance_ws_pedestrian_tracking/maps/lio_sam/raw/"
 
     # --- Lidar Settings (VLP-16) ---
     sensor: velodyne

@@ -1,7 +1,7 @@
 name: subjective_feedback
-root: ~/nav_ws
+root: ~/dance_ws_pedestrian_tracking
 
-pre_window: source /opt/ros/humble/setup.bash && source ~/nav_ws/install/setup.bash
+pre_window: source /opt/ros/humble/setup.bash && source ~/dance_ws_pedestrian_tracking/install/setup.bash
 
 windows:
     - human_feedback_app:
@@ -11,7 +11,7 @@ windows:
           - "ros2 launch people_detector people_format_adapter.launch.py"
           - "ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9091"
           - "ros2 run arduino_multicolored_lightswitch lightswitch_node"
-          - "cd ~/nav_ws/src/human_feedback_app && ./restart_backend.sh && tail -f /tmp/survey_app.log"
+          - "cd ~/dance_ws_pedestrian_tracking/src/human_feedback_app && ./restart_backend.sh && tail -f /tmp/survey_app.log"
           # Standalone panes: launched when /tmp/.standalone_mode file exists (no navstack running)
           - "if test -f /tmp/.standalone_mode; then ros2 launch spot_velodyne velodyne.launch.py device_ip:=192.168.50.201; else echo \"Velodyne provided by navstack\"; sleep infinity; fi"
           - "if test -f /tmp/.standalone_mode; then sleep 5 && ros2 launch hdl_people_tracking hdl_people_tracking.launch.py; else echo \"People tracking provided by navstack\"; sleep infinity; fi"

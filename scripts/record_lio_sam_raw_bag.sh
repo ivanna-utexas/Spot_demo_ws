@@ -9,7 +9,7 @@ set -eo pipefail
 
 NAME=""
 ESTIMATE_GB=10
-WS_ROOT="${HOME}/nav_ws"
+WS_ROOT="${HOME}/dance_ws_pedestrian_tracking"
 REQUIRE_TEGRASTATS="${LIO_SAM_REQUIRE_TEGRASTATS:-0}"
 QOS_OVERRIDES="${WS_ROOT}/config/rosbag2/lio_sam_capture_debug_qos.yaml"
 BAG_TOPICS=(

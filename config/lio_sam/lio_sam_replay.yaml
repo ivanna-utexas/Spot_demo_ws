@@ -2,5 +2,5 @@
   ros__parameters:
     use_sim_time: true
     savePCD: true
-    savePCDDirectory: "/home/ros/nav_ws/maps/lio_sam/raw/"
+    savePCDDirectory: "/home/ros/dance_ws_pedestrian_tracking/maps/lio_sam/raw/"
     loopClosureEnableFlag: true

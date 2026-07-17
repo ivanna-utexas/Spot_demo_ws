@@ -157,7 +157,7 @@ def main():
 
     # Promote to maps/final/
     if args.promote:
-        ws_root = os.path.expanduser('~/nav_ws')
+        ws_root = os.path.expanduser('~/dance_ws_pedestrian_tracking')
         final_dir = os.path.join(ws_root, 'maps', 'final')
         os.makedirs(final_dir, exist_ok=True)
 

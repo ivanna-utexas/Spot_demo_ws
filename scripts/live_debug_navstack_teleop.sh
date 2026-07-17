@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="${HOME}/nav_ws"
+ROOT="${HOME}/dance_ws_pedestrian_tracking"
 STAMP="$(date +%Y%m%d_%H%M%S)"
 OUT_DIR="${ROOT}/bags/live_debug/navstack_teleop_${STAMP}"
 

@@ -135,7 +135,7 @@ def _transform_from_section(section):
 
 
 def load_mapping_calibration(path=None):
-    path = path or os.path.expanduser('~/nav_ws/config/mapping/extrinsics.yaml')
+    path = path or os.path.expanduser('~/dance_ws_pedestrian_tracking/config/mapping/extrinsics.yaml')
     raw = {}
     if os.path.isfile(path):
         with open(path, encoding='utf-8') as stream:

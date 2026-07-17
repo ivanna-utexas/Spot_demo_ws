@@ -11,7 +11,7 @@ from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
-    ws_root = os.path.expanduser('~/nav_ws')
+    ws_root = os.path.expanduser('~/dance_ws_pedestrian_tracking')
     default_map_dir = os.path.join(
         ws_root,
         'maps',

@@ -1,5 +1,5 @@
 name: hdl_people_tracking
-root: ~/nav_ws
+root: ~/dance_ws_pedestrian_tracking
 
 windows:
   - hdl_people_tracking:
