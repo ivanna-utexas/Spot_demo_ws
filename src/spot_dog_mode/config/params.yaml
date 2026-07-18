@@ -1,0 +1,34 @@
+dog_mode_gaze_controller:
+  ros__parameters:
+    # Topics / frames
+    people_topic: "/people_detections"
+    body_pose_topic: "body_pose"
+    feedback_topic: "/status/feedback"
+    joy_topic: "/joy"
+    body_frame: "body"
+
+    # Behavior tuning
+    command_rate: 10.0
+    attention_radius: 4.0        # m: person enters attention
+    target_switch_margin: 0.75   # m: new person must be this much closer to steal target
+    target_match_radius: 1.0     # m: spatial re-association when detector ids are unstable
+    target_lost_timeout: 1.5     # s: target missing before relaxing
+    detection_timeout: 1.0       # s: no detection messages -> suspend gaze
+    greet_ramp: 0.5              # s: ramp into the look-up greeting
+    greet_hold: 1.2              # s: hold the greeting pose
+    greet_pitch_boost: 0.15      # rad: extra look-up during greeting
+    smoothing_tau: 0.3           # s: tracking low-pass time constant
+    max_rate_rad_s: 1.0          # rad/s: slew limit on commanded angles
+    relax_duration: 1.0          # s: ease back to neutral
+    max_yaw: 0.4                 # rad (matches spot_joy MAX_YAW)
+    max_pitch: 0.4               # rad (matches spot_joy MAX_PITCH)
+    pitch_sign: -1.0             # flip to 1.0 if the robot bows instead of looking up
+    default_person_height: 1.7   # m: fallback head height
+    min_person_height: 0.5       # m: cluster height below this uses the fallback
+    body_height_above_ground: 0.52  # m: Spot body height when standing
+
+    # Integration
+    start_enabled: false
+    deadman_button: 4            # L1 (spot_joy BTN_DEADMAN_MANUAL)
+    publish_eye_gaze: false
+    eye_gaze_topic: "eye_animation/gaze"

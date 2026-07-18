@@ -2,7 +2,7 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.duration import Duration
-from std_srvs.srv import Trigger
+from std_srvs.srv import Trigger, SetBool
 from sensor_msgs.msg import Joy
 from geometry_msgs.msg import Twist, Pose
 from spot_msgs.srv import SetLocomotion, SetStairsMode
@@ -109,6 +109,8 @@ class SpotJoyTeleop(Node):
         self.cli_rollover = self.create_client(Trigger, 'rollover')
         self.cli_locomotion = self.create_client(SetLocomotion, 'locomotion_mode')
         self.cli_stairs = self.create_client(SetStairsMode, 'stairs_mode')
+        self.cli_dog_mode = self.create_client(SetBool, '/dog_mode/enable')
+        self.dog_mode_enabled = False
         
         # Subscription
         self.joy_sub = self.create_subscription(Joy, 'joy', self.joy_callback, 1)
@@ -189,6 +191,11 @@ class SpotJoyTeleop(Node):
             self.set_locomotion(1)
             self.in_stand_mode = False
             self.get_logger().info("Walk mode requested. Hold L1 for velocity control.")
+
+        # Circle: toggle Auto Dog Mode (spot_dog_mode gaze controller)
+        if self.pressed(msg, BTN_CIRCLE):
+            self.dog_mode_enabled = not self.dog_mode_enabled
+            self.call_dog_mode(self.dog_mode_enabled)
 
         # D-PAD Up/Down: Body Height
         if len(msg.axes) > AXIS_DPAD_UD:
@@ -315,6 +322,16 @@ class SpotJoyTeleop(Node):
                 self.get_logger().error(f"{name} service call failed: {e}")
 
         future.add_done_callback(_done)
+
+    def call_dog_mode(self, enable: bool):
+        if not self.cli_dog_mode.wait_for_service(timeout_sec=1.0):
+            self.get_logger().warn("Dog mode service not available")
+            self.dog_mode_enabled = not enable
+            return
+        req = SetBool.Request()
+        req.data = enable
+        self.cli_dog_mode.call_async(req)
+        self.get_logger().info(f"Auto Dog Mode: {'ON' if enable else 'OFF'}")
 
     def set_locomotion(self, mode_id):
         if not self.cli_locomotion.wait_for_service(timeout_sec=1.0):

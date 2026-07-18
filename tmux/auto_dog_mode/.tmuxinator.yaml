@@ -1,0 +1,19 @@
+name: auto_dog_mode
+root: ~/dance_ws_pedestrian_tracking
+
+# Auto Dog Mode demo (Step 1): Spot greets and gaze-tracks nearby people.
+# Toggle with the Circle button on the PS4 pad (or:
+#   ros2 service call /dog_mode/enable std_srvs/srv/SetBool "{data: true}")
+windows:
+  - dog_mode:
+      layout: main-vertical
+      panes:
+        -
+        - ros2 launch spot_driver spot_driver.launch.py config_file:=/home/ros/dance_ws_pedestrian_tracking/params/spot_driver.yaml
+        - ros2 launch spot_velodyne velodyne.launch.py device_ip:=192.168.50.201
+        - ros2 launch hdl_people_tracking hdl_people_tracking.launch.py
+        - ros2 launch spot_dog_mode dog_mode.launch.py
+        - 'ros2 launch spot_joy teleop.launch.py verbose:=true joy_dev:="${JOY_DEV:-/dev/input/ps4_primary}"'
+        - vnc
+        #- ros2 launch spot_eye_animation eye_animation.launch.py
+        - sleep 10; DISPLAY=:9 rviz2 -d rviz2/navstack.rviz

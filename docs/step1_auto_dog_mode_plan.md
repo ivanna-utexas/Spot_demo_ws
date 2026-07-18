@@ -12,11 +12,11 @@ Aligned decisions:
 
 ## What already exists (reuse, don't rebuild)
 
-| Piece | Where | What it gives us |
+| Functionality | Package | Overview |
 |---|---|---|
 | LiDAR person detection + tracking | `src/hdl_people_tracking/` (launch: `hdl_people_tracking.launch.py`) | Kalman-tracked people from `/velodyne_points`, output in `odom` frame |
-| Standardized detections | `src/people_detector/scripts/people_format_adapter_node.py` | `/people_detections` (`people_detector/PeopleArray`): per-person 3D `position`, `velocity`, `size` (→ height), RViz markers |
-| Body pose command channel | `spot_ros2` driver: `body_pose` topic (`geometry_msgs/Pose`), handled in `spot_driver/spot_ros2.py:body_pose_callback` | Sets body roll/pitch/yaw + height offset rel. to footprint via mobility params. Mock mode logs the pose when no robot is connected |
+| Pedestrian detections | `src/people_detector/scripts/people_format_adapter_node.py` | `/people_detections` (`people_detector/PeopleArray`): per-person 3D `position`, `velocity`, `size` (→ height), RViz markers |
+| Body pose command | `spot_ros2` driver: `body_pose` topic (`geometry_msgs/Pose`), handled in `spot_driver/spot_ros2.py:body_pose_callback` | Sets body roll/pitch/yaw + height offset rel. to footprint via mobility params. Mock mode logs the pose when no robot is connected |
 | Pose limits & quaternion math | `src/spot_nav/spot_joy/spot_joy/teleop_node.py` (MAX_ROLL/PITCH/YAW = 0.4 rad, MAX_BODY_HEIGHT = 0.3 m) | Safe command ranges + existing RPY→quaternion pattern |
 | Standing/sitting/moving state | `/status/feedback` (`spot_msgs/Feedback`: `standing`, `sitting`, `moving`) — already consumed by teleop | Standing-only gate |
 | Target selection w/ hysteresis | `spot_eye_animation/face_gaze_node.py:_select_face` | Pattern to copy for sticky target selection |
@@ -26,7 +26,7 @@ Aligned decisions:
 
 ## Implementation
 
-### 1. New package `src/spot_dog_mode` (ament_python)
+### 1. New Package `src/spot_dog_mode` (ament_python)
 
 Files: `package.xml`, `setup.py`, `resource/`, `config/params.yaml`, `launch/dog_mode.launch.py`, `spot_dog_mode/gaze_controller_node.py`.
 
@@ -55,16 +55,16 @@ Files: `package.xml`, `setup.py`, `resource/`, `config/params.yaml`, `launch/dog
 
 **`launch/dog_mode.launch.py`**: gaze controller + `people_format_adapter` (from `people_detector`), with an `include_hdl:=true` arg to optionally include `hdl_people_tracking.launch.py`.
 
-### 2. Joystick toggle — `src/spot_nav/spot_joy/spot_joy/teleop_node.py`
+### 2. Joystick Toggle — `src/spot_nav/spot_joy/spot_joy/teleop_node.py`
 
-- Add a rising-edge toggle on an unused button (proposal: **BTN_OPTIONS**; Share is reserved for gesture recording in the dance workspace) that calls `/dog_mode/enable` (SetBool, async) and logs state.
+- Add a rising-edge toggle on an unused button (**BTN_CIRCLE** — Options is taken by Claim/Power-On, Share is reserved for gesture recording in the dance workspace) that calls `/dog_mode/enable` (SetBool, async) and logs state.
 - No other teleop changes: the gaze node's own `/joy` deadman-suspend handles arbitration, and teleop's existing neutral-pose-on-release stays the final authority.
 
-### 3. Demo tmux session — `tmux/auto_dog_mode/.tmuxinator.yaml`
+### 3. TMUX Session — `tmux/auto_dog_mode/.tmuxinator.yaml`
 
 Clone of `navstack_minimal` minus the nav stack: spot_driver, velodyne, `hdl_people_tracking`, `dog_mode.launch.py`, spot_joy teleop, vnc + rviz (reuse `rviz2/navstack.rviz`, which already shows people markers), eye_animation pane commented in as optional.
 
-### 4. Later hybrid step (documented, not built now)
+### 4. Azure Kinect (next step)
 
 Camera refinement: fuse `face_gaze_node` detections (Azure Kinect) in the forward sector to confirm person + refine head height; or port detection to Spot body cameras. Noted as follow-up in the package README.
 
