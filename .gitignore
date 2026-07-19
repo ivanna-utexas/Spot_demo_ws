@@ -67,3 +67,4 @@ src/spot_nav/
 src/vlm_policy/
 src/tl_expected/
 src/vendor/
+.navws_runtime/

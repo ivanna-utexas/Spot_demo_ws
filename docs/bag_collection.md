@@ -20,7 +20,12 @@
    demo bug.
 3. Confirm people tracking works live: `ros2 topic hz /people_detections`
    while someone walks in front.
-4. Disk: `df -h /` — budget ~400 MB/min of recording (velodyne dominates).
+4. Confirm the Kinect reference video is flowing:
+   `ros2 topic hz /rgb/video/compressed` — should tick at ~30 Hz. This comes
+   from the `image_transport republish` pane (the k4a driver's own
+   `/rgb/image_raw/compressed` topic advertises but never publishes).
+5. Disk: `df -h /` — budget ~600–800 MB/min of recording (velodyne
+   dominates; compressed 720p30 video adds roughly 200–400 MB/min).
 
 ## Record 
 Record **inside the container** into the workspace (bags elsewhere, e.g.
@@ -33,7 +38,8 @@ ros2 bag record -o test_bags/dogmode_$(date +%m%d)_<scenario_name> \
   /odom /odometry \
   /status/feedback /joy \
   /people_detections /tracks /clusters \
-  /body_pose /dog_mode/enabled /rosout
+  /body_pose /dog_mode/enabled /rosout \
+  /rgb/video/compressed /rgb/camera_info
 ```
 
 Topic groups and why:
@@ -44,6 +50,7 @@ Topic groups and why:
 | Robot state | `/status/feedback /joy /odometry` | Real standing/moving/deadman gating — replaying the bag's feedback (instead of faking "standing") tests the gates against reality. |
 | Live perception outputs | `/people_detections /tracks /clusters` | Ground truth to diff against re-run perception offline (detects hdl config drift). |
 | Live behavior outputs | `/body_pose /dog_mode/enabled /rosout` | What the controller actually commanded on-robot + its state-transition logs — the golden reference to compare sim/replay against, and the record of how it *felt* vs what it *did*. |
+| Reference video | `/rgb/video/compressed /rgb/camera_info` | Kinect RGB (JPEG, 720p30) — human-viewable ground truth of what people actually did in each scenario, for labeling and for settling "was that a real miss?" disputes during replay analysis. |
 
 ## Scenarios
 
