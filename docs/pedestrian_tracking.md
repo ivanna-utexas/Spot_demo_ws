@@ -85,6 +85,12 @@ Source: `src/hdl_people_tracking/hdl_people_tracking/apps/hdl_people_detection_n
    (`enable_classification: true`).
 5. **Output**: `/clusters` (`ClusterArray`) in `tracking_frame`.
 
+The detector's point-cloud debug topics form a strict subset chain:
+`/human_points` contains only clusters with `is_human=true`, `/cluster_points`
+contains every size-gated cluster, and `/backsub_points` contains the complete
+background-subtracted residual. Therefore
+`/human_points ⊆ /cluster_points ⊆ /backsub_points`.
+
 **Frame contract**: `tracking_frame` (param, default `odom`) **must equal the
 `globalmap` header frame**, otherwise the node logs an error and rejects the map
 (`hdl_people_detection_nodelet.cpp:208`). The scan is TF-transformed from the

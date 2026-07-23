@@ -1,0 +1,59 @@
+centerpoint_people_node:
+  ros__parameters:
+    # I/O
+    points_topic: /velodyne_points
+    output_topic: /nearby_people
+    target_frame: base_link
+
+    # Model assets (absolute paths; built TensorRT engine + SCN backbone ONNX).
+    model_plan_path: /home/ros/pref_ws/src/Lidar_AI_Solution/CUDA-CenterPoint/model/rpn_centerhead_sim.plan
+    scn_onnx_path: /home/ros/pref_ws/src/Lidar_AI_Solution/CUDA-CenterPoint/model/centerpoint.scn.onnx
+
+    # Detection filtering / output.
+    # score_threshold is the SPAWN threshold: a brand-new person track is only
+    # started from detections at/above this score (raise it to suppress spurious
+    # false-positive humans). It is live-tunable via the web UI.
+    score_threshold: 0.5
+    # maintain_score_threshold is the lower hysteresis floor: detections in
+    # [maintain, spawn) are not allowed to spawn new tracks, but ARE fed to the
+    # smoother so they can associate to and sustain an already-confirmed track.
+    # This keeps a real person's track alive through weak frames without
+    # admitting new ghosts. Must be <= score_threshold.
+    maintain_score_threshold: 0.3
+    max_obstacles: 16
+
+    # Sensor adaptation knobs (VLP-16 single sweep vs nuScenes 32-beam x10).
+    # z_offset shifts points up/down to emulate the ~1.84 m nuScenes mount height
+    # so the ground plane matches what the network was trained on. Tune on-robot.
+    z_offset: 0.0
+    intensity_scale: 1.0
+
+    # TF lookup timeout for sensor -> ego transform.
+    tf_timeout_sec: 0.1
+
+    # Temporal smoother (base_link). Smooths live positions and bridges the
+    # occasional missed frame by extrapolating a finite-difference velocity so
+    # people stop blinking on/off and jittering. Set enable_tracker: false to
+    # revert to raw per-frame detections.
+    enable_tracker: true
+    # Max distance (m) to link a detection to an existing person across frames.
+    association_gate_m: 0.8
+    # Position smoothing: lower measurement_noise / higher process_noise = snappier
+    # (more real-time); raise measurement_noise to damp jitter harder.
+    position_measurement_noise: 0.15
+    position_process_noise: 0.5
+    # Low-pass on the finite-difference velocity used only for coasting (0..1).
+    velocity_smoothing_beta: 0.6
+    # Detections required before a person is published (suppresses 1-frame blips).
+    confirm_hits: 2
+    # Missed frames bridged by extrapolation before a person is dropped
+    # (~2.0 s at 10 Hz). Sized to cover the 1-3 s detector dropouts observed in
+    # mission replans; coasting only extends already-confirmed tracks so it adds
+    # no false positives. Lower it if stale ghosts appear when a person leaves.
+    max_coast_frames: 12
+
+    # Visualization.
+    publish_markers: true
+    marker_topic: centerpoint_people_markers
+
+    verbose: false
