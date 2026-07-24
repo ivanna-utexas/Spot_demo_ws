@@ -361,10 +361,15 @@ dockercmd() {
 
 case $DOCKER_COMMAND in
   build)
-    dockerbuild
-    dockerprune
-    dockerstop
-    dockerrun
+    if dockerbuild; then
+      dockerprune
+      dockerstop
+      dockerrun
+    else
+      BUILD_STATUS=$?
+      echo "Container image build failed; the existing container was left unchanged."
+      exit "$BUILD_STATUS"
+    fi
     ;;
   prune)
     dockerprune

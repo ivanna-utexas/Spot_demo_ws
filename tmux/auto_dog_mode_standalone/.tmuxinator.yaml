@@ -2,11 +2,9 @@ name: auto_dog_mode_standalone
 root: ~/dance_ws_pedestrian_tracking
 
 # Standalone pedestrian tracking test (Step 1 dry-run): exercises the
-# Velodyne + hdl_people_tracking pipeline without Spot powered on.
+# Velodyne + CUDA-CenterPoint pipeline without Spot powered on.
 #
 # Unlike auto_dog_mode, this skips spot_driver/spot_dog_mode/joy and:
-#   - launches hdl_people_tracking with static_sensor:=true, since there's
-#     no /odom from spot_driver to time-synchronize against
 #   - publishes a static odom->velodyne identity TF by hand, since that
 #     normally comes from Spot's robot_state_publisher
 windows:
@@ -15,7 +13,7 @@ windows:
       panes:
         -
         - ros2 launch spot_velodyne velodyne.launch.py device_ip:=192.168.50.201
-        - ros2 launch hdl_people_tracking hdl_people_tracking.launch.py static_sensor:=true
+        - ros2 launch people_detector pedestrian_tracking.launch.py
         - ros2 run tf2_ros static_transform_publisher 0 0 0 0 0 0 odom velodyne
         - ros2 launch azure_kinect_ros_driver driver.launch.py depth_mode:=NFOV_UNBINNED color_resolution:=720P fps:=30
         - vnc

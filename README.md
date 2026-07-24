@@ -108,11 +108,19 @@ To verify connectivity:
     ```
 5.  Test ROS 2 communication (e.g., `ros2 topic list`).
 
-## HDL People Tracking
+## CUDA-CenterPoint People Tracking
 
-To run it, simply run ```tmuxinator``` on /tmux/hdl_people_tracking/
+Initialize `src/Lidar_AI_Solution`, generate the TensorRT engine inside the
+Jetson container with `./scripts/generate_centerpoint_engine.sh`, then start
+`tmux/pedestrian_tracking` or:
 
-To properly visualize, in rviz2, switch the Fixed Frame under Global Options to "odom". Then, add "/detection_markers" and "human_points" by topic.
+```bash
+ros2 launch people_detector pedestrian_tracking.launch.py
+```
+
+The canonical outputs are `/people_detections`, `/people/map_tracks`,
+`/nearby_people`, and `/people_detections_markers`. See
+[`docs/pedestrian_tracking.md`](docs/pedestrian_tracking.md).
 
 ## SuperOdom
 

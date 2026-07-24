@@ -7,8 +7,6 @@ from typing import Deque, Dict, Iterable, List, Optional, Tuple
 import numpy as np
 import rclpy
 from geometry_msgs.msg import Vector3
-from hdl_people_tracking_msgs.msg import ClusterArray as HdlMsgsClusterArray
-from hdl_people_tracking_msgs.msg import TrackArray as HdlMsgsTrackArray
 from people_detector.msg import People, PeopleArray
 from rclpy.node import Node
 from rclpy.duration import Duration
@@ -16,14 +14,6 @@ from sensor_msgs.msg import PointCloud2
 from sensor_msgs_py import point_cloud2
 from std_msgs.msg import Int32MultiArray
 from visualization_msgs.msg import Marker, MarkerArray
-
-try:
-    from hdl_people_tracking.msg import ClusterArray as HdlLegacyClusterArray
-    from hdl_people_tracking.msg import TrackArray as HdlLegacyTrackArray
-except ImportError:
-    HdlLegacyClusterArray = None
-    HdlLegacyTrackArray = None
-
 
 class PeopleFormatAdapterNode(Node):
     def __init__(self) -> None:
@@ -34,13 +24,6 @@ class PeopleFormatAdapterNode(Node):
         self.declare_parameter("marker_topic", "/people_detections_markers")
         self.declare_parameter("marker_scale", 0.35)
         self.declare_parameter("marker_lifetime_sec", 0.5)
-
-        self.declare_parameter("enable_hdl_tracks", True)
-        self.declare_parameter("hdl_tracks_topic", "/tracks")
-
-        self.declare_parameter("enable_hdl_clusters", True)
-        self.declare_parameter("hdl_clusters_topic", "/clusters")
-        self.declare_parameter("include_non_human_clusters", False)
 
         self.declare_parameter("enable_ptv3", True)
         self.declare_parameter("ptv3_labels_topic", "/pointcept/labels")
@@ -68,22 +51,6 @@ class PeopleFormatAdapterNode(Node):
         )
         self._ptv3_id_counter = 0
 
-        if self.get_parameter("enable_hdl_tracks").value:
-            topic = self.get_parameter("hdl_tracks_topic").value
-            self.create_subscription(HdlMsgsTrackArray, topic, self._on_hdl_tracks, 10)
-            self.get_logger().info(f"HDL TrackArray input enabled (hdl_people_tracking_msgs): {topic}")
-            if HdlLegacyTrackArray is not None:
-                self.create_subscription(HdlLegacyTrackArray, topic, self._on_hdl_tracks, 10)
-                self.get_logger().info(f"HDL TrackArray input enabled (hdl_people_tracking): {topic}")
-
-        if self.get_parameter("enable_hdl_clusters").value:
-            topic = self.get_parameter("hdl_clusters_topic").value
-            self.create_subscription(HdlMsgsClusterArray, topic, self._on_hdl_clusters, 10)
-            self.get_logger().info(f"HDL ClusterArray input enabled (hdl_people_tracking_msgs): {topic}")
-            if HdlLegacyClusterArray is not None:
-                self.create_subscription(HdlLegacyClusterArray, topic, self._on_hdl_clusters, 10)
-                self.get_logger().info(f"HDL ClusterArray input enabled (hdl_people_tracking): {topic}")
-
         if self.get_parameter("enable_ptv3").value:
             labels_topic = self.get_parameter("ptv3_labels_topic").value
             points_topic = self.get_parameter("ptv3_points_topic").value
@@ -94,52 +61,6 @@ class PeopleFormatAdapterNode(Node):
         self.get_logger().info(f"Publishing standardized people detections on: {output_topic}")
         if self._markers_enabled:
             self.get_logger().info(f"Publishing RViz markers on: {marker_topic}")
-
-    def _on_hdl_tracks(self, msg) -> None:
-        out = PeopleArray()
-        out.header = msg.header
-
-        for track in msg.tracks:
-            person = People()
-            person.id = track.id
-            person.source = "hdl_tracks"
-            person.label = "person"
-            person.confidence = 1.0
-            person.is_human = True
-            person.position = track.pos
-            person.velocity = track.vel
-
-            if track.associated:
-                person.size = track.associated[0].size
-            else:
-                person.size = Vector3()
-
-            out.people.append(person)
-
-        self._publish_outputs(out)
-
-    def _on_hdl_clusters(self, msg) -> None:
-        include_non_human = bool(self.get_parameter("include_non_human_clusters").value)
-
-        out = PeopleArray()
-        out.header = msg.header
-
-        for idx, cluster in enumerate(msg.clusters):
-            if (not include_non_human) and (not cluster.is_human):
-                continue
-
-            person = People()
-            person.id = idx
-            person.source = "hdl_clusters"
-            person.label = "person" if cluster.is_human else "unknown"
-            person.confidence = 1.0 if cluster.is_human else 0.2
-            person.is_human = cluster.is_human
-            person.position = cluster.centroid
-            person.velocity = Vector3()
-            person.size = cluster.size
-            out.people.append(person)
-
-        self._publish_outputs(out)
 
     def _on_points(self, msg: PointCloud2) -> None:
         try:
@@ -321,10 +242,6 @@ class PeopleFormatAdapterNode(Node):
 
     @staticmethod
     def _source_color(source: str) -> Tuple[float, float, float]:
-        if source == "hdl_tracks":
-            return (0.1, 0.8, 0.2)
-        if source == "hdl_clusters":
-            return (1.0, 0.6, 0.1)
         if source == "ptv3_labels":
             return (0.2, 0.5, 1.0)
         return (0.8, 0.8, 0.8)

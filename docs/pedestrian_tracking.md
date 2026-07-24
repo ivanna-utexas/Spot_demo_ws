@@ -1,278 +1,350 @@
-# Pedestrian Tracking Pipeline
+# CUDA-CenterPoint Pedestrian Tracking
 
-How the Spot payload detects and tracks people from the VLP-16 lidar, and how to run and debug the pipeline.
+`people_detector` owns the default LiDAR pedestrian detection and tracking
+pipeline. It replaces separate detector, cluster, and tracker processes with
+one CUDA-CenterPoint node that preserves 3D boxes and publishes stable tracks
+for navigation, visualization, and dog mode.
 
-## 1. Overview
-
-The pipeline is three stages, each a separate node (or pair of nodes):
+## System dataflow
 
 ```mermaid
-graph TD
-    %% Define Styles
-   %%  classDef cppNode fill:#f9f9f9,stroke:#333,stroke-width:2px,color:#000;
-   %%  classDef pyNode fill:#f4f4f4,stroke:#333,stroke-width:1px,color:#000;
-   %%  classDef topic fill:#fff,stroke:#666,stroke-dasharray: 5 5,color:#333;
-   %%  classDef consumer fill:#e1f5fe,stroke:#0288d1,stroke-width:1px,color:#000;
+flowchart LR
+    cloud["/velodyne_points<br/>PointCloud2"]
+    sensor_tf["TF<br/>odom ← sensor"]
+    sweeps["Ten-sweep buffer<br/>motion compensation<br/>time-lag encoding"]
+    centerpoint["CUDA-CenterPoint<br/>3D pedestrian boxes"]
+    tracker["Kalman tracker<br/>Hungarian association<br/>confirmation + coasting"]
 
-    %% Inputs
-    V_POINTS["/velodyne_points"]:::topic
-    G_MAP["/globalmap"]:::topic
+    people["/people_detections<br/>PeopleArray · odom"]
+    map_tracks["/people/map_tracks<br/>MapPersonArray · map"]
+    nearby["/nearby_people<br/>NearbyObstacles · base_link"]
+    markers["/people_detections_markers<br/>MarkerArray · odom"]
+    diagnostics["/centerpoint_people/diagnostics<br/>DiagnosticArray"]
 
-    %% Node 1
-    DET_NODE["hdl_people_detection_node (C++)<br>• background subtraction<br>• clustering<br>• Kidono person classifier"]:::cppNode
+    dog["Spot dog mode"]
+    navigation["Navigation consumers"]
+    rviz["RViz"]
 
-    %% Intermediate Outputs
-    CLUSTERS["/clusters (ClusterArray)"]:::topic
+    cloud --> sweeps
+    sensor_tf --> sweeps
+    sweeps --> centerpoint
+    centerpoint --> tracker
 
-    %% Node 2
-    TRACK_NODE["hdl_people_tracking_node (C++)<br>• GNN data association + Kalman filter<br>• (constant-velocity model, per-person)"]:::cppNode
+    tracker --> people --> dog
+    tracker --> map_tracks --> navigation
+    tracker --> nearby --> navigation
+    tracker --> markers --> rviz
+    sweeps -. counters .-> diagnostics
+    centerpoint -. timing .-> diagnostics
+    tracker -. track state .-> diagnostics
 
-    %% Intermediate Outputs 2
-    TRACKS["/tracks (TrackArray)"]:::topic
-
-    %% Adapters
-    FMT_ADAPTER["people_format_adapter (py)<br>unifies hdl tracks, hdl<br>clusters, and PTv3 labels"]:::pyNode
-    MAP_ADAPTER["map_tracks_adapter (py)<br>TF-transforms /tracks into<br>the map frame"]:::pyNode
-
-    %% Final Outputs
-    PEOPLE_DET["/people_detections (PeopleArray)<br>/people_detections_markers (RViz)"]:::topic
-    MAP_TRACKS["/people/map_tracks (MapPersonArray)"]:::topic
-
-    %% Consumers
-    CONSUMERS["consumers<br>• vlm_policy (social nav VLM planner)<br>• social_nav_costmap_layer (Nav2 costmap plugin)"]:::consumer
-
-    %% Connections
-    V_POINTS --> DET_NODE
-    G_MAP --> DET_NODE
-    DET_NODE --> CLUSTERS
-    DET_NODE --> TRACK_NODE
-    TRACK_NODE --> TRACKS
-    TRACK_NODE --> FMT_ADAPTER
-    TRACK_NODE --> MAP_ADAPTER
-    FMT_ADAPTER --> PEOPLE_DET
-    MAP_ADAPTER --> MAP_TRACKS
-    PEOPLE_DET --> CONSUMERS
-    MAP_TRACKS --> CONSUMERS
+    classDef input fill:#e8f1ff,stroke:#2864a8,color:#111;
+    classDef process fill:#fff3cd,stroke:#9a7400,color:#111;
+    classDef topic fill:#e9f7ef,stroke:#27864a,color:#111;
+    classDef consumer fill:#f5e8ff,stroke:#7642a8,color:#111;
+    class cloud,sensor_tf input;
+    class sweeps,centerpoint,tracker process;
+    class people,map_tracks,nearby,markers,diagnostics topic;
+    class dog,navigation,rviz consumer;
 ```
 
-Key packages:
+## Pipeline behavior
 
-| Package | Language | Role |
-|---|---|---|
-| `src/hdl_people_tracking/hdl_people_tracking` | C++ | Detection + tracking (port of [koide3/hdl_people_tracking](https://github.com/koide3/hdl_people_tracking) to ROS 2 composable nodes) |
-| `src/hdl_people_tracking/hdl_people_tracking_msgs` | msgs | `Cluster[Array]`, `Track[Array]` |
-| `src/people_detector` | Python | Format/frame adapters + unified `People*` / `MapPerson*` messages |
+For each VLP-16 cloud, `centerpoint_people_node`:
 
-## 2. How each stage works
+1. Looks up the LiDAR pose in `odom`.
+2. Accumulates ten sweeps and compensates robot motion using TF.
+3. Encodes each point as `x, y, z, intensity, time_lag`, keeping newest points
+   first if the 300,000-point limit is reached.
+4. Runs the sparse-convolution and TensorRT CenterPoint models.
+5. Preserves each pedestrian box's score, position, dimensions, yaw, and
+   predicted velocity.
+6. Transforms detections into `odom`.
+7. Associates detections globally with a constant-velocity Kalman tracker.
+8. Publishes only confirmed tracks, while coasting them through bounded short
+   occlusions.
 
-### 2.1 Detection — `hdl_people_detection_node`
+Backward timestamps and large input gaps reset the sweep buffer and tracker.
+Track IDs remain stable across normal association, but are not persisted
+across a reset or node restart.
 
-Source: `src/hdl_people_tracking/hdl_people_tracking/apps/hdl_people_detection_nodelet.cpp`
+## Interfaces
 
-1. **Inputs**: `velodyne_points` (remapped to `/velodyne_points`) and `globalmap`
-   (`PointCloud2`, QoS transient-local, depth 1). Detection does not start until a
-   `globalmap` has arrived.
-2. **Background subtraction**: the global map is voxelized
-   (`backsub_resolution`, default 0.2 m) into an occupancy structure; incoming scan
-   points that fall into occupied voxels (threshold `backsub_occupancy_thresh`) are
-   discarded. Whatever survives is "not part of the static world".
-3. **Clustering** (Haselich technique): Euclidean clustering with
-   `cluster_tolerance` 0.4 m, gated by point count (`cluster_min_pts`=10,
-   `cluster_max_pts`=8192) and bounding-box size (roughly human-sized:
-   0.2–1.0 m in x/y, 1.0–2.5 m in z).
-4. **Classification**: Kidono's boosted person classifier
-   (`data/boost_kidono.model` + `.scale`) sets `is_human` on each cluster
-   (`enable_classification: true`).
-5. **Output**: `/clusters` (`ClusterArray`) in `tracking_frame`.
+| Topic | Type | Frame | Contents |
+|---|---|---|---|
+| `/people_detections` | `people_detector/msg/PeopleArray` | `odom` | Stable ID, `source="centerpoint"`, confidence, 3D position/size, filtered velocity |
+| `/people/map_tracks` | `people_detector/msg/MapPersonArray` | `map` | Map-frame state and rotated position/velocity covariance |
+| `/nearby_people` | `bva_msgs/msg/NearbyObstacles` | `base_link` | Nearest 16 people with velocity expressed in base-frame axes |
+| `/people_detections_markers` | `visualization_msgs/msg/MarkerArray` | `odom` | Stable-ID boxes, velocity arrows, and labels |
+| `/centerpoint_people/diagnostics` | `diagnostic_msgs/msg/DiagnosticArray` | — | Sweep, point, detection, track, latency, TF, drop, and reset counters |
 
-The detector's point-cloud debug topics form a strict subset chain:
-`/human_points` contains only clusters with `is_human=true`, `/cluster_points`
-contains every size-gated cluster, and `/backsub_points` contains the complete
-background-subtracted residual. Therefore
-`/human_points ⊆ /cluster_points ⊆ /backsub_points`.
+`/people_detections` is the primary consumer contract. Dog mode consumes it
+directly, while navigation can use `/people/map_tracks` or `/nearby_people`.
 
-**Frame contract**: `tracking_frame` (param, default `odom`) **must equal the
-`globalmap` header frame**, otherwise the node logs an error and rejects the map
-(`hdl_people_detection_nodelet.cpp:208`). The scan is TF-transformed from the
-lidar frame into `tracking_frame` before background subtraction.
+If `map <- odom` is unavailable, the node immediately publishes an empty
+map-frame array so consumers clear stale state. It does the same for
+`/nearby_people` when `base_link <- odom` is unavailable. A missing transform
+from the cloud frame into the tracking frame is different: that cloud cannot
+be tracked, so the node drops it and clears all outputs.
 
-**The globalmap source**: the stock launch files run a *dummy* map publisher
-(`scripts/dummy_map_publisher.py` — a single point at the origin, frame `odom`;
-`dummy_map_publisher_map.py` is the `map`-frame variant). With a dummy map,
-background subtraction is a no-op and *everything* becomes a candidate cluster —
-the size gates and the classifier then do all the filtering. To actually
-subtract the building, publish your real 3D map point cloud (e.g. an exported
-LiORF/LIO-SAM map) on `globalmap` with transient-local QoS in the tracking
-frame instead.
+```mermaid
+flowchart TD
+    input["Receive stamped point cloud"]
+    required_tf{"TF odom ← cloud frame<br/>available?"}
+    process["Accumulate sweeps<br/>infer + update tracker"]
+    publish_people["Publish /people_detections<br/>in odom"]
+    map_tf{"TF map ← odom<br/>available?"}
+    base_tf{"TF base_link ← odom<br/>available?"}
+    publish_map["Publish transformed<br/>/people/map_tracks"]
+    clear_map["Publish empty map array<br/>to clear stale state"]
+    publish_nearby["Publish nearest 16<br/>/nearby_people"]
+    clear_nearby["Publish empty base array<br/>to clear stale state"]
+    clear_all["Drop cloud, increment counters,<br/>and publish clearing outputs"]
 
-### 2.2 Tracking — `hdl_people_tracking_node`
+    input --> required_tf
+    required_tf -- no --> clear_all
+    required_tf -- yes --> process
+    process --> publish_people
+    process --> map_tf
+    process --> base_tf
+    map_tf -- yes --> publish_map
+    map_tf -- no --> clear_map
+    base_tf -- yes --> publish_nearby
+    base_tf -- no --> clear_nearby
+```
 
-Source: `apps/hdl_people_tracking_nodelet.cpp`,
-`include/hdl_people_tracking/people_tracker.hpp`, `kalman_tracker.hpp`,
-`include/kkl/alg/*`.
+## Requirements
 
-- Takes `is_human` clusters from `/clusters`.
-- **Data association**: global nearest neighbor (Munkres/Hungarian assignment,
-  `kkl/alg/global_nearest_neighbor_association.hpp`) matching clusters to
-  existing tracks; `human_radius` (0.4 m) bounds the gate.
-- **Filtering**: one Kalman filter per person with a constant-velocity model.
-  Tracks that go unobserved accumulate covariance and are removed once the
-  position trace exceeds `remove_trace_thresh` (1.0).
-- **Output**: `/tracks` (`TrackArray`). Each `Track` carries:
-  `id` (stable across frames), `age` (seconds), `pos`, `vel`, `pos_cov[9]`,
-  `vel_cov[9]`, and `associated` clusters (used downstream for bounding-box size).
+- Jetson Orin with the NVIDIA container runtime.
+- CUDA and TensorRT development/runtime libraries supplied by JetPack.
+- ROS 2 Humble.
+- Point clouds on `/velodyne_points` by default.
+- Continuous TF from the point-cloud frame into `odom`.
+- Optional `map <- odom` and `base_link <- odom` transforms for their
+  respective downstream outputs.
 
-### 2.3 Adapters — `people_detector`
+TensorRT plans are machine- and runtime-specific. Do not copy a plan from
+another Jetson or commit it to Git.
 
-**`people_format_adapter_node.py`** ([launch](../src/people_detector/launch/people_format_adapter.launch.py))
-merges up to three sources into one `PeopleArray` on `/people_detections`:
+## First-time setup
 
-| Source | Input topic | ID stability | Velocity | Confidence |
-|---|---|---|---|---|
-| `hdl_tracks` | `/tracks` | stable | yes (KF) | 1.0 |
-| `hdl_clusters` | `/clusters` | per-frame index | no | 1.0 human / 0.2 other |
-| `ptv3_labels` | `/pointcept/labels` + `/velodyne_points` | **new ID every frame** | no | 1.0 |
-
-The PTv3 path takes per-point semantic labels (Point Transformer v3 /
-Pointcept, person label = 1 by default), matches the label array back to a
-buffered point cloud **by point count** (exact match preferred, near-match
-within `ptv3_match_count_tolerance`=32 points accepted), masks person points,
-z-gates them (−1.0…2.5 m), and runs a grid-hash Euclidean clustering
-(`ptv3_cluster_tolerance` 0.6 m, ≥20 points per cluster).
-
-It also publishes RViz markers on `/people_detections_markers`:
-sphere + text label per person, color-coded — **green** = hdl_tracks,
-**orange** = hdl_clusters, **blue** = ptv3_labels.
-
-**`map_tracks_adapter_node.py`** ([launch](../src/people_detector/launch/map_tracks_adapter.launch.py))
-converts `/tracks` into `MapPersonArray` on `/people/map_tracks`, in the `map`
-frame (param `target_frame`). It looks up TF `map ← odom` at the message stamp
-(`transform_timeout_sec` 0.05 s), rotates position/velocity, rotates both
-covariances properly (R·Σ·Rᵀ), and adds timing metadata: `sample_time_sec`,
-`track_age_sec`, and per-track `dt_sec` since that ID was last seen. This is
-the topic planners should use — positions stay consistent while the robot
-drives, since AMCL owns `map → odom`.
-
-### 2.4 Message reference
-
-- `hdl_people_tracking_msgs/Track`: `id, age, pos, vel, pos_cov[9], vel_cov[9], associated[], `
-- `hdl_people_tracking_msgs/Cluster`: `is_human, min_pt, max_pt, size, centroid`
-- `people_detector/People`: `id, source, label, confidence, is_human, position, velocity, size`
-- `people_detector/MapPerson`: `id, source, confidence, sample_time_sec, track_age_sec, dt_sec, position, velocity, size, position_covariance[9], velocity_covariance[9]`
-
-Note both `hdl_people_tracking_msgs` and a legacy `hdl_people_tracking/msg`
-variant of the messages exist; the adapters subscribe to both types on the same
-topic and use whichever arrives.
-
-## 3. Running it
-
-Everything runs inside the container (`./container shell`, or
-`docker exec nav_ws /bin/bash -lc '...'` for one-offs).
-
-### 3.1 Build
+Initialize the pinned CUDA-CenterPoint source and build the project image on
+the host:
 
 ```bash
-colcon build --symlink-install --packages-select \
-  hdl_people_tracking_msgs hdl_people_tracking people_detector
+cd /home/ros/dance_ws_pedestrian_tracking
+git submodule update --init --recursive src/Lidar_AI_Solution
+./container build
+```
+
+On success, `./container build` starts the new container. Enter it with:
+
+```bash
+./container shell
+```
+
+All ROS commands must be run inside the project container. The normal
+workspace mount is `/nav_ws`; on installations that retain the host path, use
+`/home/ros/dance_ws_pedestrian_tracking` instead.
+
+Inside the container:
+
+```bash
+cd /nav_ws
+source /opt/ros/humble/setup.bash
+
+./scripts/generate_centerpoint_engine.sh
+colcon build --packages-up-to people_detector --symlink-install
 source install/setup.bash
 ```
 
-### 3.2 Full session via tmuxinator
+The engine script:
+
+- detects the installed TensorRT version;
+- builds a version-tagged plan under `.navws_runtime/centerpoint/`;
+- verifies that TensorRT can deserialize it; and
+- creates the relative compatibility symlink
+  `.navws_runtime/centerpoint/rpn_centerhead_sim.plan`.
+
+Run the script again after changing JetPack, TensorRT, the CenterPoint model,
+or the deployment Jetson.
+
+## Launching
+
+Start the Velodyne and odometry/TF sources first, then launch CenterPoint:
 
 ```bash
-tmuxinator start hdl_people_tracking   # from ~/nav_ws
+source /opt/ros/humble/setup.bash
+source /nav_ws/install/setup.bash
+ros2 launch people_detector pedestrian_tracking.launch.py
 ```
 
-This launches (see `tmux/hdl_people_tracking/.tmuxinator.yaml`): the Azure
-Kinect driver, `hdl_people_tracking.launch.py`, the Velodyne driver
-(`spot_velodyne`), a VNC server, and RViz (`rviz2/navstack.rviz`) on `DISPLAY=:9`.
+The launch defaults to:
 
-### 3.3 Manual, piece by piece
+- input `/velodyne_points`;
+- tracking frame `odom`;
+- map frame `map`;
+- robot frame `base_link`;
+- ten sweeps;
+- three hits to confirm a track; and
+- six missed frames of bounded coasting.
+
+To override a launch-exposed setting:
 
 ```bash
-# 1. Lidar
-ros2 launch spot_velodyne velodyne.launch.py
-
-# 2. Detection + tracking (odom frame, dummy globalmap)
-ros2 launch hdl_people_tracking hdl_people_tracking.launch.py
-#    …or in the map frame (requires map→odom TF, i.e. AMCL/nav stack running):
-ros2 launch hdl_people_tracking hdl_people_tracking_map.launch.py
-
-# 3. Unified detections + RViz markers
-ros2 launch people_detector people_format_adapter.launch.py
-
-# 4. Map-frame tracks for planners (requires map→odom TF)
-ros2 launch people_detector map_tracks_adapter.launch.py
+ros2 launch people_detector pedestrian_tracking.launch.py \
+  points_topic:=/velodyne_points \
+  tracking_frame:=odom \
+  score_threshold:=0.55 \
+  confirm_hits:=3
 ```
 
-Useful launch arguments:
-
-- `hdl_people_tracking.launch.py`: `static_sensor:=true` if the lidar is not
-  moving (skips odometry compensation).
-- `hdl_people_tracking_map.launch.py`: `tracking_frame:=map` (default) and runs
-  `dummy_map_publisher_map.py` instead of the odom-frame one.
-- `people_format_adapter.launch.py`: `enable_hdl_tracks / enable_hdl_clusters /
-  enable_ptv3` to toggle sources; `include_non_human_clusters:=true` to also
-  pass low-confidence clusters.
-- `map_tracks_adapter.launch.py`: `target_frame`, `tracks_topic`, `output_topic`.
-
-### 3.4 Verifying it works
+List every launch argument with:
 
 ```bash
-ros2 topic hz /velodyne_points          # lidar up (~10 Hz)
-ros2 topic echo /clusters --once        # detections flowing, check is_human
-ros2 topic echo /tracks --once          # stable ids, non-zero vel when walking
+ros2 launch people_detector pedestrian_tracking.launch.py --show-args
+```
+
+Use `tmux/pedestrian_tracking` for a standalone live visualization session:
+
+```bash
+cd /nav_ws/tmux/pedestrian_tracking
+tmuxinator local
+```
+
+The navstack, auto-dog-mode, human-feedback, and VLM dependency sessions
+already launch CenterPoint. Do not start another instance when using one of
+those sessions, because duplicate publishers would contend for the canonical
+topics and GPU.
+
+For a stationary detector dry run without Spot:
+
+```bash
+cd /nav_ws/tmux/auto_dog_mode_standalone
+tmuxinator local
+```
+
+That session publishes a static identity `odom -> velodyne` transform. It is
+only appropriate while the sensor is stationary; live robot motion requires
+real odometry.
+
+## Configuration and tuning
+
+Defaults are in
+`src/people_detector/config/centerpoint_people.yaml`. Launch arguments
+override the corresponding YAML values.
+
+| Parameter | Default | Effect |
+|---|---:|---|
+| `sweep_count` | `10` | Motion-compensated temporal accumulation |
+| `reset_gap_sec` | `1.0` s | Timestamp gap that resets tracking |
+| `score_threshold` | `0.5` | Minimum score for spawning a track |
+| `maintain_score_threshold` | `0.3` | Lower threshold for maintaining an existing track |
+| `association_gate_m` | `1.5` m | Maximum Euclidean association distance |
+| `mahalanobis_gate` | `9.21` | Covariance-aware association threshold |
+| `association_velocity_weight` | `0.5` | Velocity consistency contribution |
+| `confirm_hits` | `3` | Consecutive associations before publication |
+| `max_coast_frames` | `6` | Missed frames retained before expiration |
+| `max_obstacles` | `16` | Maximum nearest people on `/nearby_people` |
+| `tf_timeout_sec` | `0.05` s | Required tracking-transform timeout |
+
+Raise `score_threshold` or `confirm_hits` to suppress short false positives.
+Lowering them improves responsiveness but can create ghosts. Adjust
+`maintain_score_threshold` separately so a marginal observation can preserve
+an established track without spawning a new one.
+
+Tracker noise, gating, thresholds, and coasting should be tuned from recorded
+bags before live validation. Avoid changing multiple association parameters
+at once.
+
+PTv3 and ZED bridges remain explicit alternatives. Never run an alternative
+publisher concurrently with CenterPoint on a canonical output topic.
+
+## Verification
+
+Confirm input and output rates:
+
+```bash
+ros2 topic hz /velodyne_points
+ros2 topic hz /people_detections
+```
+
+Inspect the output contracts:
+
+```bash
 ros2 topic echo /people_detections --once
-ros2 topic echo /people/map_tracks --once   # needs map→odom TF
-ros2 run tf2_ros tf2_echo map odom          # sanity-check localization
+ros2 topic echo /people/map_tracks --once
+ros2 topic echo /nearby_people --once
+ros2 topic echo /centerpoint_people/diagnostics --once
 ```
 
-In RViz add `MarkerArray` on `/people_detections_markers` — walk in front of
-the robot and you should see a green sphere with `id=N src=hdl_tracks`
-following you, with the id staying constant.
+Confirm their types:
 
-## 4. Tuning knobs
+```bash
+ros2 topic list -t | grep -E \
+  'people_detections|people/map_tracks|nearby_people|centerpoint_people/diagnostics'
+```
 
-Detection (`hdl_people_tracking.launch.py`, inline params):
+RViz configurations subscribe to `/people_detections_markers`. A confirmed
+person should appear as a stable-ID box with a velocity arrow and text label.
 
-| Param | Default | Effect |
-|---|---|---|
-| `backsub_resolution` / `backsub_occupancy_thresh` | 0.2 / 2 | Background-subtraction voxel size / hit threshold |
-| `cluster_tolerance` | 0.4 | Cluster merge distance — raise if a person splits into two clusters |
-| `cluster_min/max_pts` | 10 / 8192 | Point-count gate — lower `min_pts` for far-away people |
-| `cluster_*_size_*` | 0.2–1.0 (xy), 1.0–2.5 (z) | Human-sized bounding-box gate — lower `min_size_z` to catch children/sitting people |
-| `enable_classification` | true | Disable to treat every size-gated cluster as human |
+Diagnostics include:
 
-Tracking: `human_radius` (0.4, association gate), `remove_trace_thresh`
-(1.0, higher = tracks survive longer occlusions).
+| Key | Meaning |
+|---|---|
+| `sweep_count` | Sweeps currently accumulated |
+| `input_points` | Valid points in the newest cloud |
+| `packed_points` | Points sent to CenterPoint |
+| `detections` | Pedestrian boxes surviving the score threshold |
+| `confirmed_tracks` | Tracks currently published |
+| `inference_ms` | GPU inference duration |
+| `callback_ms` | End-to-end cloud callback duration |
+| `missing_tf_frames` | Missing required or optional output transforms |
+| `dropped_frames` | Input clouds that could not be processed |
+| `reset_frames` | Timestamp/gap resets |
+| `frames_received` | Point clouds received by the node |
 
-PTv3 path: `ptv3_person_label`, `ptv3_cluster_tolerance`, `ptv3_min_cluster_points`,
-`ptv3_min_z`/`max_z`, `ptv3_point_buffer_size`, `ptv3_match_count_tolerance`.
+At startup, `sweep_count` ramps from 1 to 10. Unconfirmed detections can make
+`detections` nonzero while `confirmed_tracks` remains zero for the first few
+frames.
 
-## 5. Troubleshooting
+## Troubleshooting
 
-- **No `/clusters` at all** → detector never got a `globalmap`, or the map
-  frame ≠ `tracking_frame`. Look for
-  `globalmap frame '…' != tracking_frame '…'` or
-  `globalmap has not been received!!` in the container logs. The dummy map
-  publisher is one-shot but transient-local, so late joiners still receive it —
-  if you restarted only the *publisher*, restart the detector too.
-- **Clusters but nothing `is_human`** → the size gates or Kidono classifier are
-  rejecting them. Try `include_non_human_clusters:=true` on the format adapter
-  to visualize what's being rejected, then loosen `cluster_*_size_*` or set
-  `enable_classification:=false` to isolate which stage drops them.
-- **`/people/map_tracks` empty, warning `TF unavailable for /tracks`** → no
-  `map → odom` transform; start localization (nav stack / AMCL) or set
-  `target_frame:=odom`.
-- **PTv3 warnings about labels/points length mismatch** → the label array
-  doesn't match any buffered cloud within tolerance; check that
-  `ptv3_points_topic` is the same cloud the segmentation node consumed, or
-  raise `ptv3_point_buffer_size` / `ptv3_match_count_tolerance`.
-- **Track ids jumping** → association gate too tight for fast walkers: raise
-  `human_radius`; or detections are flickering (fix detection gates first).
-- **Ghost detections on furniture/walls** → you're running with the dummy
-  globalmap, so nothing is background-subtracted. Publish the real map cloud on
-  `globalmap` (transient-local, in `tracking_frame`).
-- Remember the PTv3 source assigns a **fresh id every frame**
-  (`_ptv3_id_counter`); only `hdl_tracks` ids are stable. Don't key persistent
-  state off `/people_detections` ids unless `source == "hdl_tracks"`.
+### Missing or incompatible TensorRT plan
+
+Run inside the Jetson container:
+
+```bash
+cd /nav_ws
+./scripts/generate_centerpoint_engine.sh
+```
+
+Startup intentionally rejects a missing plan, a plan tagged for a different
+TensorRT major version, a missing sparse-convolution model, or an unavailable
+CUDA device.
+
+### No `/people_detections`
+
+Check that `/velodyne_points` is active and inspect the diagnostic topic. Then
+verify that TF can connect `odom` to the frame in the cloud header. Without
+that tracking transform, the node publishes clearing messages but cannot run
+association.
+
+### Empty map or nearby outputs
+
+Check the `map <- odom` and `base_link <- odom` TF chains. These transforms are
+optional for tracking itself, so `/people_detections` may remain healthy while
+one downstream array is empty.
+
+### Detections but no confirmed tracks
+
+Wait for the ten-sweep warm-up and the default three-hit confirmation window.
+Then inspect `score_threshold`, `maintain_score_threshold`, TF stability, and
+timestamp continuity.
+
+### Low output rate or high latency
+
+Ensure only one CenterPoint node is running, no input backlog is accumulating,
+and the container has NVIDIA runtime access. Use `inference_ms`,
+`callback_ms`, and `frames_received` to distinguish GPU time from ROS/TF
+overhead.

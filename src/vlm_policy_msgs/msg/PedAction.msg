@@ -7,7 +7,7 @@ uint8 ACTION_OVERTAKE     = 2
 uint8 ACTION_FOLLOW       = 3
 uint8 ACTION_YIELD_TO     = 4
 
-int32   track_id                    # matches hdl_people_tracking Track.id
+int32   track_id                    # matches people_detector/People.id
 uint8   action                      # one of the ACTION_* constants above
 float32 confidence                  # VLM confidence in [0, 1]
 

@@ -8,12 +8,12 @@ windows:
         layout: main-vertical
         panes:
           - "sleep 8; clear; echo \"YOUR ROBOT IP ADDRESS IS:\"; hostname -I; echo \"--------------------------------\"; echo \"Access the Dashboard on PORT 8080\"; test -f /tmp/.standalone_mode && echo \"Mode: STANDALONE\" || echo \"Mode: WITH NAVSTACK\"; echo \"\"; echo \"Press Ctrl+B then D to detach.\"; sleep infinity"
-          - "ros2 launch people_detector people_format_adapter.launch.py"
+          - "echo 'Canonical people output: /people_detections'; sleep infinity"
           - "ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9091"
           - "ros2 run arduino_multicolored_lightswitch lightswitch_node"
           - "cd ~/dance_ws_pedestrian_tracking/src/human_feedback_app && ./restart_backend.sh && tail -f /tmp/survey_app.log"
           # Standalone panes: launched when /tmp/.standalone_mode file exists (no navstack running)
           - "if test -f /tmp/.standalone_mode; then ros2 launch spot_velodyne velodyne.launch.py device_ip:=192.168.50.201; else echo \"Velodyne provided by navstack\"; sleep infinity; fi"
-          - "if test -f /tmp/.standalone_mode; then sleep 5 && ros2 launch hdl_people_tracking hdl_people_tracking.launch.py; else echo \"People tracking provided by navstack\"; sleep infinity; fi"
+          - "if test -f /tmp/.standalone_mode; then sleep 5 && ros2 launch people_detector pedestrian_tracking.launch.py; else echo \"People tracking provided by navstack\"; sleep infinity; fi"
           - "if test -f /tmp/.standalone_mode; then ros2 run av_recorder bag_recorder; else echo \"Bag recorder provided by navstack\"; sleep infinity; fi"
           - "if test -f /tmp/.standalone_mode; then ros2 run tf2_ros static_transform_publisher 0 0 0 0 0 0 odom velodyne; else echo \"TF provided by navstack\"; sleep infinity; fi"

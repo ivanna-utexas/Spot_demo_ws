@@ -1,285 +1,90 @@
-// CenterPoint LiDAR people-detector node.
-//
-// Subscribes to a Velodyne PointCloud2, runs the CUDA-CenterPoint engine
-// (filtered to the nuScenes "pedestrian" class), transforms each detection
-// into the robot ego frame via TF, and publishes the nearest people as
-// bva_msgs/NearbyObstacles on /nearby_people -- a drop-in replacement for the
-// ZED-based people detection that fed the same topic.
+// Canonical CUDA-CenterPoint LiDAR pedestrian detection and tracking node.
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <filesystem>
 #include <memory>
+#include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
 #include <cuda_runtime.h>
+#include <NvInferVersion.h>
 
+#include <diagnostic_msgs/msg/diagnostic_array.hpp>
+#include <diagnostic_msgs/msg/diagnostic_status.hpp>
+#include <diagnostic_msgs/msg/key_value.hpp>
+#include <geometry_msgs/msg/transform_stamped.hpp>
+#include <rcl_interfaces/msg/set_parameters_result.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
-#include <geometry_msgs/msg/pose_stamped.hpp>
-#include <geometry_msgs/msg/transform_stamped.hpp>
-#include <visualization_msgs/msg/marker_array.hpp>
-
+#include <tf2/LinearMath/Matrix3x3.h>
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
-
-#include <rcl_interfaces/msg/set_parameters_result.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
 
 #include <bva_msgs/msg/nearby_obstacle.hpp>
 #include <bva_msgs/msg/nearby_obstacles.hpp>
+#include <people_detector/msg/map_person.hpp>
+#include <people_detector/msg/map_person_array.hpp>
+#include <people_detector/msg/people.hpp>
+#include <people_detector/msg/people_array.hpp>
 
 #include "centerpoint.h"
-#include "postprocess.h"
 #include "common.h"
+#include "postprocess.h"
+#include "people_detector/sweep_accumulator.hpp"
+#include "people_detector/tracker.hpp"
+#include "people_detector/transform_utils.hpp"
+#include "people_detector/validation.hpp"
+
+namespace pd = people_detector;
 
 namespace
 {
-constexpr char kDefaultPlanPath[] =
-  "/home/ros/pref_ws/src/Lidar_AI_Solution/CUDA-CenterPoint/model/rpn_centerhead_sim.plan";
-constexpr char kDefaultScnPath[] =
-  "/home/ros/pref_ws/src/Lidar_AI_Solution/CUDA-CenterPoint/model/centerpoint.scn.onnx";
 
-double yawFromQuaternion(const geometry_msgs::msg::Quaternion & q)
+double stampSeconds(const builtin_interfaces::msg::Time & stamp)
 {
-  const double siny_cosp = 2.0 * (q.w * q.z + q.x * q.y);
-  const double cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z);
-  return std::atan2(siny_cosp, cosy_cosp);
+  return static_cast<double>(stamp.sec) + static_cast<double>(stamp.nanosec) * 1.0e-9;
 }
 
-// A single CenterPoint pedestrian detection expressed in the ego (base_link) frame.
-struct PersonDet
+pd::RigidTransform toRigid(const geometry_msgs::msg::TransformStamped & transform)
 {
-  double x;
-  double y;
-  double cos_theta;
-  double sin_theta;
-  // Detection confidence; used by the smoother's spawn hysteresis (only
-  // detections at/above the spawn threshold may start a new track).
-  double score;
-};
-
-// A smoothed person emitted by the temporal smoother (carries a stable id).
-// vx/vy are the ego-frame (relative-to-robot) finite-difference velocity.
-struct SmoothedPerson
-{
-  int id;
-  double x;
-  double y;
-  double cos_theta;
-  double sin_theta;
-  double vx;
-  double vy;
-};
-
-// Ego-frame output row used for range-sorting / capping / marker rendering.
-struct OutDet
-{
-  int id;
-  double x;
-  double y;
-  double cos_theta;
-  double sin_theta;
-  double vx;
-  double vy;
-  double range_sq;
-};
-
-// Lightweight multi-object temporal smoother (base_link frame, no Eigen).
-//
-// Positions follow CenterPoint in real time via a per-axis scalar smoothing
-// filter; a finite-difference velocity is estimated only to extrapolate (coast)
-// a person through the occasional missed frame so detections stop blinking.
-class PeopleSmoother
-{
-public:
-  struct Params
-  {
-    double association_gate_m{0.8};
-    double position_measurement_noise{0.15};
-    double position_process_noise{0.5};
-    double velocity_smoothing_beta{0.6};
-    int confirm_hits{2};
-    int max_coast_frames{6};
-    // Minimum detection score required to spawn a brand-new track. Detections
-    // below this (but above the node's maintain pre-filter) may only associate
-    // to an existing track, never create one. 0 means "spawn from anything".
-    double spawn_score_threshold{0.0};
-  };
-
-  void configure(const Params & p) { params_ = p; }
-
-  // Live-update the spawn hysteresis threshold (mirrors the node's live
-  // score_threshold) without disturbing existing track state.
-  void set_spawn_score_threshold(double v) { params_.spawn_score_threshold = v; }
-
-  // Update with this frame's detections and the time since the previous frame.
-  // Returns the confirmed, currently-active people (live or briefly coasting).
-  std::vector<SmoothedPerson> update(const std::vector<PersonDet> & dets, double dt)
-  {
-    // Clamp dt: non-positive or absurd gaps disable motion for this step.
-    double mdt = dt;
-    if (!std::isfinite(mdt) || mdt < 0.0) {
-      mdt = 0.0;
-    } else if (mdt > kMaxDt) {
-      mdt = kMaxDt;
+  const auto & q_msg = transform.transform.rotation;
+  tf2::Quaternion q(q_msg.x, q_msg.y, q_msg.z, q_msg.w);
+  tf2::Matrix3x3 matrix(q);
+  pd::RigidTransform result;
+  for (int row = 0; row < 3; ++row) {
+    for (int col = 0; col < 3; ++col) {
+      result.rotation[row * 3 + col] = matrix[row][col];
     }
-
-    // Predict positions forward by velocity, used for association gating only.
-    std::vector<double> pred_x(tracks_.size());
-    std::vector<double> pred_y(tracks_.size());
-    for (size_t i = 0; i < tracks_.size(); ++i) {
-      pred_x[i] = tracks_[i].x + tracks_[i].vx * mdt;
-      pred_y[i] = tracks_[i].y + tracks_[i].vy * mdt;
-    }
-
-    // Greedy nearest-neighbor association under the distance gate.
-    const double gate_sq = params_.association_gate_m * params_.association_gate_m;
-    struct Pair
-    {
-      double d2;
-      size_t det;
-      size_t trk;
-    };
-    std::vector<Pair> pairs;
-    pairs.reserve(dets.size() * tracks_.size());
-    for (size_t d = 0; d < dets.size(); ++d) {
-      for (size_t t = 0; t < tracks_.size(); ++t) {
-        const double dx = dets[d].x - pred_x[t];
-        const double dy = dets[d].y - pred_y[t];
-        const double d2 = dx * dx + dy * dy;
-        if (d2 <= gate_sq) {
-          pairs.push_back({d2, d, t});
-        }
-      }
-    }
-    std::sort(pairs.begin(), pairs.end(),
-      [](const Pair & a, const Pair & b) { return a.d2 < b.d2; });
-
-    std::vector<int> det_to_trk(dets.size(), -1);
-    std::vector<bool> trk_matched(tracks_.size(), false);
-    std::vector<bool> det_matched(dets.size(), false);
-    for (const Pair & pr : pairs) {
-      if (det_matched[pr.det] || trk_matched[pr.trk]) {
-        continue;
-      }
-      det_matched[pr.det] = true;
-      trk_matched[pr.trk] = true;
-      det_to_trk[pr.det] = static_cast<int>(pr.trk);
-    }
-
-    const double R = params_.position_measurement_noise;
-    const double Q = params_.position_process_noise;
-    const double beta = params_.velocity_smoothing_beta;
-
-    // Update matched tracks: smooth toward the detection, refresh velocity.
-    for (size_t d = 0; d < dets.size(); ++d) {
-      const int ti = det_to_trk[d];
-      if (ti < 0) {
-        continue;
-      }
-      Track & tr = tracks_[static_cast<size_t>(ti)];
-      const double old_x = tr.x;
-      const double old_y = tr.y;
-
-      const double kx = tr.px / (tr.px + R);
-      tr.x = tr.x + kx * (dets[d].x - tr.x);
-      tr.px = (1.0 - kx) * tr.px + Q;
-
-      const double ky = tr.py / (tr.py + R);
-      tr.y = tr.y + ky * (dets[d].y - tr.y);
-      tr.py = (1.0 - ky) * tr.py + Q;
-
-      if (mdt > 0.0) {
-        const double inst_vx = (tr.x - old_x) / mdt;
-        const double inst_vy = (tr.y - old_y) / mdt;
-        tr.vx = beta * tr.vx + (1.0 - beta) * inst_vx;
-        tr.vy = beta * tr.vy + (1.0 - beta) * inst_vy;
-      }
-
-      tr.cos_theta = dets[d].cos_theta;
-      tr.sin_theta = dets[d].sin_theta;
-      tr.hits += 1;
-      tr.misses = 0;
-    }
-
-    // Coast unmatched tracks by extrapolating with velocity; drop the expired.
-    std::vector<Track> survivors;
-    survivors.reserve(tracks_.size());
-    for (size_t t = 0; t < tracks_.size(); ++t) {
-      Track tr = tracks_[t];
-      if (!trk_matched[t]) {
-        tr.x += tr.vx * mdt;
-        tr.y += tr.vy * mdt;
-        tr.px += Q;
-        tr.py += Q;
-        tr.misses += 1;
-        if (tr.misses > params_.max_coast_frames) {
-          continue;
-        }
-      }
-      survivors.push_back(tr);
-    }
-    tracks_.swap(survivors);
-
-    // Spawn tentative tracks from unmatched detections. Hysteresis: only
-    // sufficiently-confident detections may start a NEW track; weaker ones were
-    // admitted solely to sustain existing tracks via association above.
-    for (size_t d = 0; d < dets.size(); ++d) {
-      if (det_matched[d]) {
-        continue;
-      }
-      if (dets[d].score < params_.spawn_score_threshold) {
-        continue;
-      }
-      Track tr;
-      tr.id = next_id_++;
-      tr.x = dets[d].x;
-      tr.y = dets[d].y;
-      tr.px = R;
-      tr.py = R;
-      tr.cos_theta = dets[d].cos_theta;
-      tr.sin_theta = dets[d].sin_theta;
-      tr.hits = 1;
-      tr.misses = 0;
-      tracks_.push_back(tr);
-    }
-
-    // Emit confirmed tracks (live or coasting).
-    std::vector<SmoothedPerson> out;
-    out.reserve(tracks_.size());
-    for (const Track & tr : tracks_) {
-      if (tr.hits < params_.confirm_hits) {
-        continue;
-      }
-      out.push_back({tr.id, tr.x, tr.y, tr.cos_theta, tr.sin_theta, tr.vx, tr.vy});
-    }
-    return out;
   }
+  result.translation = {
+    transform.transform.translation.x,
+    transform.transform.translation.y,
+    transform.transform.translation.z};
+  return result;
+}
 
-private:
-  struct Track
-  {
-    int id{0};
-    double x{0.0};
-    double y{0.0};
-    double px{0.0};
-    double py{0.0};
-    double vx{0.0};
-    double vy{0.0};
-    double cos_theta{1.0};
-    double sin_theta{0.0};
-    int hits{0};
-    int misses{0};
-  };
+double planarYaw(const pd::RigidTransform & transform)
+{
+  return std::atan2(transform.rotation[3], transform.rotation[0]);
+}
 
-  static constexpr double kMaxDt = 0.5;
-  Params params_;
-  std::vector<Track> tracks_;
-  int next_id_{0};
-};
+void addDiagnostic(
+  diagnostic_msgs::msg::DiagnosticStatus & status, const std::string & key,
+  const std::string & value)
+{
+  diagnostic_msgs::msg::KeyValue pair;
+  pair.key = key;
+  pair.value = value;
+  status.values.push_back(pair);
+}
+
 }  // namespace
 
 class CenterPointPeopleNode : public rclcpp::Node
@@ -288,82 +93,56 @@ public:
   CenterPointPeopleNode()
   : rclcpp::Node("centerpoint_people_node")
   {
-    points_topic_ = declare_parameter<std::string>("points_topic", "/velodyne_points");
-    output_topic_ = declare_parameter<std::string>("output_topic", "/nearby_people");
-    target_frame_ = declare_parameter<std::string>("target_frame", "base_link");
-    plan_path_ = declare_parameter<std::string>("model_plan_path", kDefaultPlanPath);
-    scn_path_ = declare_parameter<std::string>("scn_onnx_path", kDefaultScnPath);
-    score_threshold_ = declare_parameter<double>("score_threshold", 0.3);
-    // Lower hysteresis floor: detections in [maintain, spawn) feed the smoother
-    // for association/maintenance only. Clamped to <= score_threshold below.
-    maintain_score_threshold_ = declare_parameter<double>("maintain_score_threshold", 0.2);
-    max_obstacles_ = declare_parameter<int>("max_obstacles", 16);
-    z_offset_ = declare_parameter<double>("z_offset", 0.0);
-    intensity_scale_ = declare_parameter<double>("intensity_scale", 1.0);
-    publish_markers_ = declare_parameter<bool>("publish_markers", true);
-    marker_topic_ = declare_parameter<std::string>("marker_topic", "centerpoint_people_markers");
-    tf_timeout_sec_ = declare_parameter<double>("tf_timeout_sec", 0.1);
-    bool verbose = declare_parameter<bool>("verbose", false);
-
-    // Temporal smoother (base_link). Smooths live positions and bridges missed
-    // frames with a finite-difference velocity so people stop blinking/jittering.
-    enable_tracker_ = declare_parameter<bool>("enable_tracker", true);
-    PeopleSmoother::Params smoother_params;
-    smoother_params.association_gate_m =
-      declare_parameter<double>("association_gate_m", 0.8);
-    smoother_params.position_measurement_noise =
-      declare_parameter<double>("position_measurement_noise", 0.15);
-    smoother_params.position_process_noise =
-      declare_parameter<double>("position_process_noise", 0.5);
-    smoother_params.velocity_smoothing_beta =
-      declare_parameter<double>("velocity_smoothing_beta", 0.6);
-    smoother_params.confirm_hits = declare_parameter<int>("confirm_hits", 2);
-    smoother_params.max_coast_frames = declare_parameter<int>("max_coast_frames", 6);
-    // Spawn hysteresis: new tracks require the (higher) score_threshold; the
-    // pre-filter below admits anything >= maintain_score_threshold so weak
-    // returns can sustain confirmed tracks without creating ghosts.
-    smoother_params.spawn_score_threshold = score_threshold_;
-    smoother_.configure(smoother_params);
-
-    RCLCPP_INFO(get_logger(), "Loading CenterPoint engine:\n  plan: %s\n  scn : %s",
-      plan_path_.c_str(), scn_path_.c_str());
-
-    // Construct and prepare the engine once; reuse across callbacks.
-    centerpoint_ = std::make_unique<CenterPoint>(plan_path_, scn_path_, verbose);
-    centerpoint_->prepare();
-
-    checkCudaErrors(cudaStreamCreate(&stream_));
-    checkCudaErrors(cudaMalloc(
-      reinterpret_cast<void **>(&d_points_),
-      MAX_POINTS_NUM * params_.feature_num * sizeof(float)));
-    host_points_.reserve(MAX_POINTS_NUM * params_.feature_num);
+    declareAndValidateParameters();
+    validateRuntimeAssets();
 
     tf_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+    accumulator_ = std::make_unique<pd::SweepAccumulator>(
+      static_cast<std::size_t>(sweep_count_), MAX_POINTS_NUM, reset_gap_sec_);
+    tracker_ = std::make_unique<pd::KalmanTracker>(tracker_params_);
 
-    pub_ = create_publisher<bva_msgs::msg::NearbyObstacles>(output_topic_, 10);
-    if (publish_markers_) {
-      marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(marker_topic_, 10);
+    RCLCPP_INFO(
+      get_logger(), "Loading CenterPoint assets:\n  plan: %s\n  scn:  %s",
+      plan_path_.c_str(), scn_path_.c_str());
+    centerpoint_ = std::make_unique<CenterPoint>(plan_path_, scn_path_, verbose_);
+    centerpoint_->prepare();
+    const auto cuda_status = cudaStreamCreate(&stream_);
+    if (cuda_status != cudaSuccess) {
+      throw std::runtime_error(
+              std::string("Failed to create CUDA stream: ") + cudaGetErrorString(cuda_status));
+    }
+    const auto alloc_status = cudaMalloc(
+      reinterpret_cast<void **>(&d_points_), MAX_POINTS_NUM * params_.feature_num * sizeof(float));
+    if (alloc_status != cudaSuccess) {
+      throw std::runtime_error(
+              std::string("Failed to allocate CenterPoint input: ") +
+              cudaGetErrorString(alloc_status));
     }
 
-    sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
+    people_pub_ = create_publisher<people_detector::msg::PeopleArray>(people_topic_, 10);
+    map_pub_ = create_publisher<people_detector::msg::MapPersonArray>(map_topic_, 10);
+    nearby_pub_ = create_publisher<bva_msgs::msg::NearbyObstacles>(nearby_topic_, 10);
+    marker_pub_ =
+      create_publisher<visualization_msgs::msg::MarkerArray>(marker_topic_, 10);
+    diagnostics_pub_ =
+      create_publisher<diagnostic_msgs::msg::DiagnosticArray>(diagnostics_topic_, 10);
+    cloud_sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
       points_topic_, rclcpp::SensorDataQoS(),
       std::bind(&CenterPointPeopleNode::onCloud, this, std::placeholders::_1));
-
-    // Allow a subset of parameters to be retuned at runtime (e.g. from the
-    // preference_query web UI via SetParameters). Only the detection knobs
-    // below are live; model paths / topics remain startup-only.
-    param_cb_handle_ = add_on_set_parameters_callback(
+    parameter_callback_ = add_on_set_parameters_callback(
       std::bind(&CenterPointPeopleNode::onSetParameters, this, std::placeholders::_1));
 
-    RCLCPP_INFO(get_logger(),
-      "CenterPoint people detector ready: %s -> %s (target_frame=%s, score>=%.2f, max=%d)",
-      points_topic_.c_str(), output_topic_.c_str(), target_frame_.c_str(),
-      score_threshold_, max_obstacles_);
+    RCLCPP_INFO(
+      get_logger(),
+      "CenterPoint is canonical: %s -> {%s, %s, %s, %s}, tracking in %s with %d sweeps",
+      points_topic_.c_str(), people_topic_.c_str(), map_topic_.c_str(),
+      nearby_topic_.c_str(), marker_topic_.c_str(), tracking_frame_.c_str(), sweep_count_);
   }
 
   ~CenterPointPeopleNode() override
   {
+    centerpoint_.reset();
     if (d_points_ != nullptr) {
       cudaFree(d_points_);
     }
@@ -373,344 +152,575 @@ public:
   }
 
 private:
-  void onCloud(const sensor_msgs::msg::PointCloud2::ConstSharedPtr msg)
+  void declareAndValidateParameters()
   {
-    const size_t num_points = packCloud(*msg);
-    if (num_points == 0) {
-      publishEmpty(msg->header);
-      return;
-    }
+    points_topic_ = declare_parameter<std::string>("points_topic", "/velodyne_points");
+    people_topic_ = declare_parameter<std::string>("people_topic", "/people_detections");
+    map_topic_ = declare_parameter<std::string>("map_topic", "/people/map_tracks");
+    nearby_topic_ = declare_parameter<std::string>("nearby_topic", "/nearby_people");
+    marker_topic_ =
+      declare_parameter<std::string>("marker_topic", "/people_detections_markers");
+    diagnostics_topic_ = declare_parameter<std::string>(
+      "diagnostics_topic", "/centerpoint_people/diagnostics");
+    tracking_frame_ = declare_parameter<std::string>("tracking_frame", "odom");
+    map_frame_ = declare_parameter<std::string>("map_frame", "map");
+    base_frame_ = declare_parameter<std::string>("base_frame", "base_link");
+    plan_path_ = declare_parameter<std::string>("model_plan_path", "");
+    scn_path_ = declare_parameter<std::string>("scn_onnx_path", "");
+    require_versioned_engine_ =
+      declare_parameter<bool>("require_versioned_engine", true);
+    score_threshold_ = declare_parameter<double>("score_threshold", 0.5);
+    maintain_score_threshold_ =
+      declare_parameter<double>("maintain_score_threshold", 0.3);
+    sweep_count_ = declare_parameter<int>("sweep_count", 10);
+    reset_gap_sec_ = declare_parameter<double>("reset_gap_sec", 1.0);
+    max_obstacles_ = declare_parameter<int>("max_obstacles", 16);
+    z_offset_ = declare_parameter<double>("z_offset", 0.0);
+    intensity_scale_ = declare_parameter<double>("intensity_scale", 1.0);
+    tf_timeout_sec_ = declare_parameter<double>("tf_timeout_sec", 0.05);
+    publish_markers_ = declare_parameter<bool>("publish_markers", true);
+    verbose_ = declare_parameter<bool>("verbose", false);
 
-    // H2D copy and inference.
-    checkCudaErrors(cudaMemcpyAsync(
-      d_points_, host_points_.data(),
-      num_points * params_.feature_num * sizeof(float),
-      cudaMemcpyHostToDevice, stream_));
-    checkCudaErrors(cudaStreamSynchronize(stream_));
+    tracker_params_.association_gate_m =
+      declare_parameter<double>("association_gate_m", 1.5);
+    tracker_params_.mahalanobis_gate =
+      declare_parameter<double>("mahalanobis_gate", 9.21);
+    tracker_params_.association_velocity_weight =
+      declare_parameter<double>("association_velocity_weight", 0.5);
+    tracker_params_.position_measurement_noise =
+      declare_parameter<double>("position_measurement_noise", 0.25);
+    tracker_params_.velocity_measurement_noise =
+      declare_parameter<double>("velocity_measurement_noise", 2.0);
+    tracker_params_.position_process_noise =
+      declare_parameter<double>("position_process_noise", 1.0);
+    tracker_params_.velocity_process_noise =
+      declare_parameter<double>("velocity_process_noise", 2.0);
+    tracker_params_.confirm_hits = declare_parameter<int>("confirm_hits", 3);
+    tracker_params_.max_coast_frames = declare_parameter<int>("max_coast_frames", 6);
+    tracker_params_.max_gap_sec = reset_gap_sec_;
+    tracker_params_.spawn_score_threshold = score_threshold_;
+    tracker_params_.maintain_score_threshold = maintain_score_threshold_;
 
-    centerpoint_->doinfer(reinterpret_cast<void *>(d_points_),
-      static_cast<unsigned int>(num_points), stream_);
-    checkCudaErrors(cudaStreamSynchronize(stream_));
+    pd::validatePipelineParameters({
+      tracking_frame_, map_frame_, base_frame_, sweep_count_, max_obstacles_,
+      tracker_params_.confirm_hits, tracker_params_.max_coast_frames,
+      score_threshold_, maintain_score_threshold_, reset_gap_sec_,
+      intensity_scale_, tf_timeout_sec_});
+  }
 
-    // Resolve the sensor -> ego transform once for this cloud.
-    geometry_msgs::msg::TransformStamped tf;
-    try {
-      tf = tf_buffer_->lookupTransform(
-        target_frame_, msg->header.frame_id, msg->header.stamp,
-        rclcpp::Duration::from_seconds(tf_timeout_sec_));
-    } catch (const tf2::TransformException & ex) {
-      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
-        "TF %s -> %s unavailable: %s", msg->header.frame_id.c_str(),
-        target_frame_.c_str(), ex.what());
-      return;
-    }
-
-    std::vector<PersonDet> raw_dets;
-    raw_dets.reserve(centerpoint_->nms_pred_.size());
-
-    // Pre-filter floor: when the tracker is enabled, admit weaker detections
-    // (>= maintain_score_threshold) so they can sustain confirmed tracks via the
-    // smoother's association; spawning a new track still requires the higher
-    // score_threshold (enforced inside the smoother). With the tracker disabled
-    // there is no track maintenance, so fall back to the spawn threshold.
-    const double effective_maintain =
-      std::min(maintain_score_threshold_, score_threshold_);
-    const double prefilter_score =
-      enable_tracker_ ? effective_maintain : score_threshold_;
-
-    for (const Bndbox & box : centerpoint_->nms_pred_) {
-      if (box.id != Params::pedestrian_class_id) {
-        continue;
-      }
-      if (box.score < prefilter_score) {
-        continue;
-      }
-
-      // Build the detection pose in the sensor frame (undo the z_offset that was
-      // applied only to the inference input), then transform into the ego frame.
-      geometry_msgs::msg::PoseStamped in;
-      in.header = msg->header;
-      in.pose.position.x = box.x;
-      in.pose.position.y = box.y;
-      in.pose.position.z = box.z - z_offset_;
-      tf2::Quaternion q;
-      q.setRPY(0.0, 0.0, box.rt);
-      in.pose.orientation = tf2::toMsg(q);
-
-      geometry_msgs::msg::PoseStamped out;
-      tf2::doTransform(in, out, tf);
-
-      const double ex = out.pose.position.x;
-      const double ey = out.pose.position.y;
-      double cos_t;
-      double sin_t;
-      const double yaw = yawFromQuaternion(out.pose.orientation);
-      if (std::isfinite(yaw)) {
-        cos_t = std::cos(yaw);
-        sin_t = std::sin(yaw);
-      } else if (std::hypot(ex, ey) > 1e-3) {
-        const double radial = std::atan2(ey, ex);
-        cos_t = std::cos(radial);
-        sin_t = std::sin(radial);
-      } else {
-        cos_t = 1.0;
-        sin_t = 0.0;
-      }
-
-      raw_dets.push_back({ex, ey, cos_t, sin_t, box.score});
-    }
-
-    // Temporally smooth the per-frame detections (or pass through unchanged).
-    std::vector<SmoothedPerson> persons;
-    if (enable_tracker_) {
-      const double stamp_sec =
-        static_cast<double>(msg->header.stamp.sec) +
-        static_cast<double>(msg->header.stamp.nanosec) * 1.0e-9;
-      double dt = 0.0;
-      if (have_last_cloud_time_) {
-        dt = stamp_sec - last_stamp_sec_;
-      }
-      last_stamp_sec_ = stamp_sec;
-      have_last_cloud_time_ = true;
-      persons = smoother_.update(raw_dets, dt);
-    } else {
-      persons.reserve(raw_dets.size());
-      int idx = 0;
-      for (const PersonDet & d : raw_dets) {
-        persons.push_back({idx++, d.x, d.y, d.cos_theta, d.sin_theta, 0.0, 0.0});
-      }
-    }
-
-    std::vector<OutDet> dets;
-    dets.reserve(persons.size());
-    for (const SmoothedPerson & p : persons) {
-      dets.push_back({p.id, p.x, p.y, p.cos_theta, p.sin_theta, p.vx, p.vy, p.x * p.x + p.y * p.y});
-    }
-
-    std::sort(dets.begin(), dets.end(),
-      [](const OutDet & a, const OutDet & b) { return a.range_sq < b.range_sq; });
-    const size_t keep =
-      std::min<size_t>(dets.size(), static_cast<size_t>(std::max(0, max_obstacles_)));
-    dets.resize(keep);
-
-    bva_msgs::msg::NearbyObstacles nearby;
-    nearby.header.stamp = msg->header.stamp;
-    nearby.header.frame_id = target_frame_;
-    nearby.obstacles.reserve(dets.size());
-    for (const OutDet & d : dets) {
-      bva_msgs::msg::NearbyObstacle o;
-      o.x = d.x;
-      o.y = d.y;
-      o.cos_theta = d.cos_theta;
-      o.sin_theta = d.sin_theta;
-      o.vx = d.vx;
-      o.vy = d.vy;
-      nearby.obstacles.push_back(o);
-    }
-    pub_->publish(nearby);
-
-    if (publish_markers_ && marker_pub_) {
-      publishMarkers(nearby.header, dets);
+  void validateRuntimeAssets()
+  {
+    pd::validateModelAssets(
+      plan_path_, scn_path_, NV_TENSORRT_MAJOR, require_versioned_engine_);
+    int device_count = 0;
+    const auto cuda_status = cudaGetDeviceCount(&device_count);
+    if (cuda_status != cudaSuccess || device_count < 1) {
+      throw std::runtime_error(
+              "No CUDA device is visible to centerpoint_people_node. Start the project "
+              "container with the NVIDIA runtime on the Jetson.");
     }
   }
 
-  // Apply live updates for the tunable detection knobs. Runs on the node's
-  // executor thread; scalar assignment is safe relative to onCloud under a
-  // single-threaded spin. Parameters not handled here are accepted as-is
-  // (they were already declared) but have no live effect.
+  void onCloud(const sensor_msgs::msg::PointCloud2::ConstSharedPtr message)
+  {
+    const auto callback_start = std::chrono::steady_clock::now();
+    ++frames_received_;
+    const double stamp_sec = stampSeconds(message->header.stamp);
+    last_dt_sec_ = 0.0;
+    if (have_last_input_stamp_) {
+      const double candidate = stamp_sec - last_input_stamp_sec_;
+      if (candidate > 0.0 && candidate <= reset_gap_sec_) {
+        last_dt_sec_ = candidate;
+      }
+    }
+    last_input_stamp_sec_ = stamp_sec;
+    have_last_input_stamp_ = true;
+
+    pd::RigidTransform tracking_from_sensor;
+    try {
+      tracking_from_sensor = lookupRigid(
+        tracking_frame_, message->header.frame_id, message->header.stamp);
+    } catch (const tf2::TransformException & error) {
+      ++missing_tf_frames_;
+      ++dropped_frames_;
+      publishAllEmpty(message->header.stamp);
+      publishDiagnostics(message->header.stamp, "missing tracking TF", 0, 0, 0.0, callback_start);
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 5000, "TF %s <- %s unavailable: %s",
+        tracking_frame_.c_str(), message->header.frame_id.c_str(), error.what());
+      return;
+    }
+
+    auto points = unpackCloud(*message);
+    input_points_ = points.size();
+    if (accumulator_->add(std::move(points), tracking_from_sensor, stamp_sec)) {
+      tracker_->reset();
+      ++reset_frames_;
+    }
+    host_points_ = accumulator_->packNewestFrame(
+      tracking_from_sensor, stamp_sec, static_cast<float>(z_offset_),
+      static_cast<float>(intensity_scale_));
+    const std::size_t point_count = host_points_.size() / params_.feature_num;
+    if (point_count == 0) {
+      const auto tracks = tracker_->update({}, stamp_sec);
+      publishOutputs(message->header.stamp, tracks);
+      publishDiagnostics(message->header.stamp, "empty point cloud", 0, tracks.size(), 0.0, callback_start);
+      return;
+    }
+
+    const auto inference_start = std::chrono::steady_clock::now();
+    auto cuda_status = cudaMemcpyAsync(
+      d_points_, host_points_.data(), host_points_.size() * sizeof(float),
+      cudaMemcpyHostToDevice, stream_);
+    if (cuda_status != cudaSuccess) {
+      throw std::runtime_error(
+              std::string("CenterPoint H2D copy failed: ") + cudaGetErrorString(cuda_status));
+    }
+    centerpoint_->doinfer(d_points_, static_cast<unsigned int>(point_count), stream_);
+    cuda_status = cudaStreamSynchronize(stream_);
+    if (cuda_status != cudaSuccess) {
+      throw std::runtime_error(
+              std::string("CenterPoint inference failed: ") + cudaGetErrorString(cuda_status));
+    }
+    const double inference_ms = std::chrono::duration<double, std::milli>(
+      std::chrono::steady_clock::now() - inference_start).count();
+
+    std::vector<pd::Detection> detections;
+    for (const Bndbox & box : centerpoint_->nms_pred_) {
+      if (box.id != Params::pedestrian_class_id ||
+        box.score < maintain_score_threshold_)
+      {
+        continue;
+      }
+      pd::Point4 sensor_point{
+        box.x, box.y, box.z - static_cast<float>(z_offset_), 0.0F};
+      const auto tracking_point = tracking_from_sensor.apply(sensor_point);
+      const auto tracking_velocity =
+        pd::rotateVector(tracking_from_sensor, box.vx, box.vy);
+      detections.push_back({
+        tracking_point.x, tracking_point.y, tracking_point.z,
+        tracking_velocity[0], tracking_velocity[1],
+        box.l, box.w, box.h, box.rt + planarYaw(tracking_from_sensor), box.score});
+    }
+    detections_count_ = detections.size();
+
+    const std::size_t resets_before = tracker_->resetCount();
+    const auto tracks = tracker_->update(detections, stamp_sec);
+    if (tracker_->resetCount() != resets_before) {
+      ++reset_frames_;
+      accumulator_->clear();
+      accumulator_->add(unpackCloud(*message), tracking_from_sensor, stamp_sec);
+    }
+    publishOutputs(message->header.stamp, tracks);
+    publishDiagnostics(message->header.stamp, "OK", detections.size(), tracks.size(), inference_ms, callback_start);
+  }
+
+  std::vector<pd::Point4> unpackCloud(const sensor_msgs::msg::PointCloud2 & cloud)
+  {
+    bool has_intensity = false;
+    for (const auto & field : cloud.fields) {
+      has_intensity = has_intensity || field.name == "intensity";
+    }
+    std::vector<pd::Point4> points;
+    points.reserve(static_cast<std::size_t>(cloud.width) * cloud.height);
+    try {
+      sensor_msgs::PointCloud2ConstIterator<float> x(cloud, "x");
+      sensor_msgs::PointCloud2ConstIterator<float> y(cloud, "y");
+      sensor_msgs::PointCloud2ConstIterator<float> z(cloud, "z");
+      std::unique_ptr<sensor_msgs::PointCloud2ConstIterator<float>> intensity;
+      if (has_intensity) {
+        intensity =
+          std::make_unique<sensor_msgs::PointCloud2ConstIterator<float>>(cloud, "intensity");
+      }
+      for (; x != x.end(); ++x, ++y, ++z) {
+        const float value = intensity ? **intensity : 0.0F;
+        if (intensity) {
+          ++(*intensity);
+        }
+        if (std::isfinite(*x) && std::isfinite(*y) && std::isfinite(*z) &&
+          std::isfinite(value))
+        {
+          points.push_back({*x, *y, *z, value});
+        }
+      }
+    } catch (const std::runtime_error & error) {
+      RCLCPP_ERROR_THROTTLE(
+        get_logger(), *get_clock(), 5000, "Invalid PointCloud2 layout: %s", error.what());
+    }
+    return points;
+  }
+
+  pd::RigidTransform lookupRigid(
+    const std::string & target, const std::string & source,
+    const builtin_interfaces::msg::Time & stamp, double timeout_sec = -1.0) const
+  {
+    const double timeout = timeout_sec < 0.0 ? tf_timeout_sec_ : timeout_sec;
+    return toRigid(tf_buffer_->lookupTransform(
+        target, source, stamp, rclcpp::Duration::from_seconds(timeout)));
+  }
+
+  void publishOutputs(
+    const builtin_interfaces::msg::Time & stamp,
+    const std::vector<pd::TrackState> & tracks)
+  {
+    publishPeople(stamp, tracks);
+    publishMap(stamp, tracks);
+    publishNearby(stamp, tracks);
+    if (publish_markers_) {
+      publishMarkers(stamp, tracks);
+    }
+  }
+
+  void publishPeople(
+    const builtin_interfaces::msg::Time & stamp,
+    const std::vector<pd::TrackState> & tracks)
+  {
+    people_detector::msg::PeopleArray output;
+    output.header.stamp = stamp;
+    output.header.frame_id = tracking_frame_;
+    for (const auto & track : tracks) {
+      people_detector::msg::People person;
+      person.id = track.id;
+      person.source = "centerpoint";
+      person.label = "pedestrian";
+      person.confidence = static_cast<float>(track.score);
+      person.is_human = true;
+      person.position.x = track.x;
+      person.position.y = track.y;
+      person.position.z = track.z;
+      person.velocity.x = track.vx;
+      person.velocity.y = track.vy;
+      person.size.x = track.length;
+      person.size.y = track.width;
+      person.size.z = track.height;
+      output.people.push_back(person);
+    }
+    people_pub_->publish(output);
+  }
+
+  void publishMap(
+    const builtin_interfaces::msg::Time & stamp,
+    const std::vector<pd::TrackState> & tracks)
+  {
+    people_detector::msg::MapPersonArray output;
+    output.header.stamp = stamp;
+    output.header.frame_id = map_frame_;
+    pd::RigidTransform map_from_tracking;
+    try {
+      map_from_tracking = lookupRigid(map_frame_, tracking_frame_, stamp, 0.0);
+    } catch (const tf2::TransformException &) {
+      ++missing_tf_frames_;
+      map_pub_->publish(output);
+      return;
+    }
+    for (const auto & track : tracks) {
+      people_detector::msg::MapPerson person;
+      const auto position = map_from_tracking.apply(pd::Point4{
+          static_cast<float>(track.x), static_cast<float>(track.y),
+          static_cast<float>(track.z), 0.0F});
+      const auto velocity = pd::rotateVector(map_from_tracking, track.vx, track.vy);
+      person.id = track.id;
+      person.source = "centerpoint";
+      person.confidence = static_cast<float>(track.score);
+      person.sample_time_sec = stampSeconds(stamp);
+      person.track_age_sec = track.age_sec;
+      person.dt_sec = last_dt_sec_;
+      person.position.x = position.x;
+      person.position.y = position.y;
+      person.position.z = position.z;
+      person.velocity.x = velocity[0];
+      person.velocity.y = velocity[1];
+      person.velocity.z = velocity[2];
+      person.size.x = track.length;
+      person.size.y = track.width;
+      person.size.z = track.height;
+      const std::array<double, 9> position_covariance{
+        track.covariance[0], track.covariance[1], 0.0,
+        track.covariance[4], track.covariance[5], 0.0,
+        0.0, 0.0, 0.25};
+      const std::array<double, 9> velocity_covariance{
+        track.covariance[10], track.covariance[11], 0.0,
+        track.covariance[14], track.covariance[15], 0.0,
+        0.0, 0.0, 1.0};
+      person.position_covariance = pd::rotateCovariance(
+        map_from_tracking, position_covariance);
+      person.velocity_covariance = pd::rotateCovariance(
+        map_from_tracking, velocity_covariance);
+      output.people.push_back(person);
+    }
+    map_pub_->publish(output);
+  }
+
+  void publishNearby(
+    const builtin_interfaces::msg::Time & stamp,
+    const std::vector<pd::TrackState> & tracks)
+  {
+    bva_msgs::msg::NearbyObstacles output;
+    output.header.stamp = stamp;
+    output.header.frame_id = base_frame_;
+    pd::RigidTransform base_from_tracking;
+    try {
+      base_from_tracking = lookupRigid(base_frame_, tracking_frame_, stamp, 0.0);
+    } catch (const tf2::TransformException &) {
+      ++missing_tf_frames_;
+      nearby_pub_->publish(output);
+      return;
+    }
+    struct Candidate
+    {
+      double range_squared;
+      bva_msgs::msg::NearbyObstacle obstacle;
+    };
+    std::vector<Candidate> candidates;
+    for (const auto & track : tracks) {
+      const auto position = base_from_tracking.apply(pd::Point4{
+          static_cast<float>(track.x), static_cast<float>(track.y),
+          static_cast<float>(track.z), 0.0F});
+      const auto velocity = pd::rotateVector(base_from_tracking, track.vx, track.vy);
+      const double yaw = track.yaw + planarYaw(base_from_tracking);
+      bva_msgs::msg::NearbyObstacle obstacle;
+      obstacle.x = position.x;
+      obstacle.y = position.y;
+      obstacle.cos_theta = std::cos(yaw);
+      obstacle.sin_theta = std::sin(yaw);
+      obstacle.vx = velocity[0];
+      obstacle.vy = velocity[1];
+      candidates.push_back({
+        static_cast<double>(position.x) * position.x +
+        static_cast<double>(position.y) * position.y, obstacle});
+    }
+    std::sort(
+      candidates.begin(), candidates.end(),
+      [](const Candidate & left, const Candidate & right) {
+        return left.range_squared < right.range_squared;
+      });
+    const auto keep = std::min<std::size_t>(
+      candidates.size(), static_cast<std::size_t>(max_obstacles_));
+    for (std::size_t index = 0; index < keep; ++index) {
+      output.obstacles.push_back(candidates[index].obstacle);
+    }
+    nearby_pub_->publish(output);
+  }
+
+  void publishMarkers(
+    const builtin_interfaces::msg::Time & stamp,
+    const std::vector<pd::TrackState> & tracks)
+  {
+    visualization_msgs::msg::MarkerArray output;
+    for (const auto & track : tracks) {
+      visualization_msgs::msg::Marker box;
+      box.header.stamp = stamp;
+      box.header.frame_id = tracking_frame_;
+      box.ns = "centerpoint_boxes";
+      box.id = track.id;
+      box.type = visualization_msgs::msg::Marker::CUBE;
+      box.action = visualization_msgs::msg::Marker::ADD;
+      box.pose.position.x = track.x;
+      box.pose.position.y = track.y;
+      box.pose.position.z = track.z;
+      tf2::Quaternion orientation;
+      orientation.setRPY(0.0, 0.0, track.yaw);
+      box.pose.orientation.x = orientation.x();
+      box.pose.orientation.y = orientation.y();
+      box.pose.orientation.z = orientation.z();
+      box.pose.orientation.w = orientation.w();
+      box.scale.x = std::max(0.05, track.length);
+      box.scale.y = std::max(0.05, track.width);
+      box.scale.z = std::max(0.05, track.height);
+      box.color.r = 0.95F;
+      box.color.g = 0.2F;
+      box.color.b = 0.15F;
+      box.color.a = 0.55F;
+      box.lifetime = rclcpp::Duration::from_seconds(0.35);
+      output.markers.push_back(box);
+
+      auto velocity = box;
+      velocity.ns = "centerpoint_velocity";
+      velocity.id = track.id;
+      velocity.type = visualization_msgs::msg::Marker::ARROW;
+      velocity.pose.orientation = geometry_msgs::msg::Quaternion();
+      velocity.pose.orientation.w = 1.0;
+      velocity.points.resize(2);
+      velocity.points[0] = box.pose.position;
+      velocity.points[1] = box.pose.position;
+      velocity.points[1].x += track.vx;
+      velocity.points[1].y += track.vy;
+      velocity.scale.x = 0.06;
+      velocity.scale.y = 0.12;
+      velocity.scale.z = 0.12;
+      velocity.color.r = 0.1F;
+      velocity.color.g = 0.8F;
+      velocity.color.b = 1.0F;
+      velocity.color.a = 0.9F;
+      output.markers.push_back(velocity);
+
+      auto text = box;
+      text.ns = "centerpoint_ids";
+      text.id = track.id;
+      text.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+      text.pose.orientation.w = 1.0;
+      text.pose.position.z += track.height * 0.5 + 0.25;
+      text.scale.z = 0.25;
+      text.color.r = text.color.g = text.color.b = text.color.a = 1.0F;
+      std::ostringstream label;
+      label << "person " << track.id << " " << std::lround(track.score * 100.0) << "%";
+      text.text = label.str();
+      output.markers.push_back(text);
+    }
+    marker_pub_->publish(output);
+  }
+
+  void publishAllEmpty(const builtin_interfaces::msg::Time & stamp)
+  {
+    publishPeople(stamp, {});
+    people_detector::msg::MapPersonArray map;
+    map.header.stamp = stamp;
+    map.header.frame_id = map_frame_;
+    map_pub_->publish(map);
+    bva_msgs::msg::NearbyObstacles nearby;
+    nearby.header.stamp = stamp;
+    nearby.header.frame_id = base_frame_;
+    nearby_pub_->publish(nearby);
+    if (publish_markers_) {
+      visualization_msgs::msg::MarkerArray markers;
+      visualization_msgs::msg::Marker clear;
+      clear.header.stamp = stamp;
+      clear.header.frame_id = tracking_frame_;
+      clear.action = visualization_msgs::msg::Marker::DELETEALL;
+      markers.markers.push_back(clear);
+      marker_pub_->publish(markers);
+    }
+  }
+
+  void publishDiagnostics(
+    const builtin_interfaces::msg::Time & stamp, const std::string & message,
+    std::size_t detections, std::size_t tracks, double inference_ms,
+    const std::chrono::steady_clock::time_point & callback_start)
+  {
+    const double callback_ms = std::chrono::duration<double, std::milli>(
+      std::chrono::steady_clock::now() - callback_start).count();
+    diagnostic_msgs::msg::DiagnosticArray array;
+    array.header.stamp = stamp;
+    diagnostic_msgs::msg::DiagnosticStatus status;
+    status.name = "centerpoint_people/pipeline";
+    status.hardware_id = "cuda_centerpoint";
+    status.level = message == "OK" ?
+      diagnostic_msgs::msg::DiagnosticStatus::OK :
+      diagnostic_msgs::msg::DiagnosticStatus::WARN;
+    status.message = message;
+    addDiagnostic(status, "sweep_count", std::to_string(accumulator_->size()));
+    addDiagnostic(status, "input_points", std::to_string(input_points_));
+    addDiagnostic(status, "packed_points", std::to_string(host_points_.size() / 5));
+    addDiagnostic(status, "detections", std::to_string(detections));
+    addDiagnostic(status, "confirmed_tracks", std::to_string(tracks));
+    addDiagnostic(status, "inference_ms", std::to_string(inference_ms));
+    addDiagnostic(status, "callback_ms", std::to_string(callback_ms));
+    addDiagnostic(status, "missing_tf_frames", std::to_string(missing_tf_frames_));
+    addDiagnostic(status, "dropped_frames", std::to_string(dropped_frames_));
+    addDiagnostic(status, "reset_frames", std::to_string(reset_frames_));
+    addDiagnostic(status, "frames_received", std::to_string(frames_received_));
+    array.status.push_back(status);
+    diagnostics_pub_->publish(array);
+  }
+
   rcl_interfaces::msg::SetParametersResult onSetParameters(
-    const std::vector<rclcpp::Parameter> & params)
+    const std::vector<rclcpp::Parameter> & parameters)
   {
     rcl_interfaces::msg::SetParametersResult result;
     result.successful = true;
-
-    for (const rclcpp::Parameter & p : params) {
-      const std::string & name = p.get_name();
-      if (name == "score_threshold") {
-        const double v = p.as_double();
-        if (v < 0.0) {
+    for (const auto & parameter : parameters) {
+      if (parameter.get_name() == "score_threshold") {
+        const double value = parameter.as_double();
+        if (value < maintain_score_threshold_) {
           result.successful = false;
-          result.reason = "score_threshold must be >= 0";
-          break;
+          result.reason = "score_threshold must be >= maintain_score_threshold";
+          return result;
         }
-        score_threshold_ = v;
-        // Keep the smoother's spawn hysteresis in lockstep with the live
-        // (FP-suppressing) score threshold.
-        smoother_.set_spawn_score_threshold(score_threshold_);
-      } else if (name == "maintain_score_threshold") {
-        const double v = p.as_double();
-        if (v < 0.0) {
-          result.successful = false;
-          result.reason = "maintain_score_threshold must be >= 0";
-          break;
-        }
-        maintain_score_threshold_ = v;
-      } else if (name == "z_offset") {
-        z_offset_ = p.as_double();
-      } else if (name == "intensity_scale") {
-        const double v = p.as_double();
-        if (v < 0.0) {
-          result.successful = false;
-          result.reason = "intensity_scale must be >= 0";
-          break;
-        }
-        intensity_scale_ = v;
-      } else if (name == "max_obstacles") {
-        const int v = static_cast<int>(p.as_int());
-        if (v < 0) {
+        score_threshold_ = value;
+        tracker_->setSpawnThreshold(value);
+      } else if (parameter.get_name() == "maintain_score_threshold" ||
+        parameter.get_name() == "sweep_count" ||
+        parameter.get_name() == "tracking_frame")
+      {
+        result.successful = false;
+        result.reason = parameter.get_name() + " requires a node restart";
+        return result;
+      } else if (parameter.get_name() == "max_obstacles") {
+        const int value = static_cast<int>(parameter.as_int());
+        if (value < 0) {
           result.successful = false;
           result.reason = "max_obstacles must be >= 0";
-          break;
+          return result;
         }
-        max_obstacles_ = v;
+        max_obstacles_ = value;
       }
-    }
-
-    if (result.successful) {
-      RCLCPP_INFO(get_logger(),
-        "Live params updated: score>=%.3f z_offset=%.3f intensity_scale=%.3f max=%d",
-        score_threshold_, z_offset_, intensity_scale_, max_obstacles_);
     }
     return result;
   }
 
-  // Packs valid points into host_points_ as [x, y, z(+offset), intensity, time=0].
-  // Returns the number of points written (<= MAX_POINTS_NUM).
-  size_t packCloud(const sensor_msgs::msg::PointCloud2 & msg)
-  {
-    bool has_intensity = false;
-    for (const auto & f : msg.fields) {
-      if (f.name == "intensity") {
-        has_intensity = true;
-        break;
-      }
-    }
-
-    host_points_.clear();
-
-    sensor_msgs::PointCloud2ConstIterator<float> it_x(msg, "x");
-    sensor_msgs::PointCloud2ConstIterator<float> it_y(msg, "y");
-    sensor_msgs::PointCloud2ConstIterator<float> it_z(msg, "z");
-    std::unique_ptr<sensor_msgs::PointCloud2ConstIterator<float>> it_i;
-    if (has_intensity) {
-      it_i = std::make_unique<sensor_msgs::PointCloud2ConstIterator<float>>(msg, "intensity");
-    }
-
-    size_t count = 0;
-    for (; it_x != it_x.end(); ++it_x, ++it_y, ++it_z) {
-      float intensity = 0.0f;
-      if (it_i) {
-        intensity = **it_i;
-        ++(*it_i);
-      }
-
-      const float x = *it_x;
-      const float y = *it_y;
-      const float z = *it_z + static_cast<float>(z_offset_);
-
-      if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
-        continue;
-      }
-      if (x < params_.min_x_range || x > params_.max_x_range ||
-        y < params_.min_y_range || y > params_.max_y_range ||
-        z < params_.min_z_range || z > params_.max_z_range)
-      {
-        continue;
-      }
-
-      host_points_.push_back(x);
-      host_points_.push_back(y);
-      host_points_.push_back(z);
-      host_points_.push_back(intensity * static_cast<float>(intensity_scale_));
-      host_points_.push_back(0.0f);  // time offset (single sweep)
-
-      if (++count >= MAX_POINTS_NUM) {
-        break;
-      }
-    }
-    return count;
-  }
-
-  void publishEmpty(const std_msgs::msg::Header & cloud_header)
-  {
-    bva_msgs::msg::NearbyObstacles nearby;
-    nearby.header.stamp = cloud_header.stamp;
-    nearby.header.frame_id = target_frame_;
-    pub_->publish(nearby);
-  }
-
-  void publishMarkers(const std_msgs::msg::Header & header, const std::vector<OutDet> & dets)
-  {
-    visualization_msgs::msg::MarkerArray arr;
-
-    // Stable per-track marker ids let RViz update people in place (each marker
-    // self-expires via its lifetime), so they persist instead of being cleared
-    // and recreated every frame.
-    for (const OutDet & d : dets) {
-      visualization_msgs::msg::Marker m;
-      m.header = header;
-      m.ns = "centerpoint_people";
-      m.id = d.id;
-      m.type = visualization_msgs::msg::Marker::CYLINDER;
-      m.action = visualization_msgs::msg::Marker::ADD;
-      m.pose.position.x = d.x;
-      m.pose.position.y = d.y;
-      m.pose.position.z = 0.9;
-      m.pose.orientation.w = 1.0;
-      m.scale.x = 0.6;
-      m.scale.y = 0.6;
-      m.scale.z = 1.8;
-      m.color.r = 1.0f;
-      m.color.g = 0.2f;
-      m.color.b = 0.2f;
-      m.color.a = 0.7f;
-      m.lifetime = rclcpp::Duration::from_seconds(0.3);
-      arr.markers.push_back(m);
-    }
-    marker_pub_->publish(arr);
-  }
-
-  // Parameters.
   std::string points_topic_;
-  std::string output_topic_;
-  std::string target_frame_;
+  std::string people_topic_;
+  std::string map_topic_;
+  std::string nearby_topic_;
+  std::string marker_topic_;
+  std::string diagnostics_topic_;
+  std::string tracking_frame_;
+  std::string map_frame_;
+  std::string base_frame_;
   std::string plan_path_;
   std::string scn_path_;
-  std::string marker_topic_;
-  double score_threshold_{0.3};
-  double maintain_score_threshold_{0.2};
-  int max_obstacles_{16};
+  bool require_versioned_engine_{true};
+  bool publish_markers_{true};
+  bool verbose_{false};
+  double score_threshold_{0.5};
+  double maintain_score_threshold_{0.3};
+  double reset_gap_sec_{1.0};
   double z_offset_{0.0};
   double intensity_scale_{1.0};
-  bool publish_markers_{true};
-  double tf_timeout_sec_{0.1};
-
-  // Temporal smoother state.
-  bool enable_tracker_{true};
-  PeopleSmoother smoother_;
-  bool have_last_cloud_time_{false};
-  double last_stamp_sec_{0.0};
-
-  // Engine + CUDA resources.
+  double tf_timeout_sec_{0.05};
+  double last_dt_sec_{0.0};
+  double last_input_stamp_sec_{0.0};
+  bool have_last_input_stamp_{false};
+  int sweep_count_{10};
+  int max_obstacles_{16};
+  pd::TrackerParams tracker_params_;
   Params params_;
+
+  std::unique_ptr<pd::SweepAccumulator> accumulator_;
+  std::unique_ptr<pd::KalmanTracker> tracker_;
   std::unique_ptr<CenterPoint> centerpoint_;
   cudaStream_t stream_{nullptr};
   float * d_points_{nullptr};
   std::vector<float> host_points_;
 
-  // ROS interfaces.
   std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
-  rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr sub_;
-  rclcpp::Publisher<bva_msgs::msg::NearbyObstacles>::SharedPtr pub_;
+  rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr cloud_sub_;
+  rclcpp::Publisher<people_detector::msg::PeopleArray>::SharedPtr people_pub_;
+  rclcpp::Publisher<people_detector::msg::MapPersonArray>::SharedPtr map_pub_;
+  rclcpp::Publisher<bva_msgs::msg::NearbyObstacles>::SharedPtr nearby_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_pub_;
-  OnSetParametersCallbackHandle::SharedPtr param_cb_handle_;
+  rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr diagnostics_pub_;
+  OnSetParametersCallbackHandle::SharedPtr parameter_callback_;
+
+  std::size_t frames_received_{0};
+  std::size_t input_points_{0};
+  std::size_t detections_count_{0};
+  std::size_t missing_tf_frames_{0};
+  std::size_t dropped_frames_{0};
+  std::size_t reset_frames_{0};
 };
 
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<CenterPointPeopleNode>());
+  try {
+    rclcpp::spin(std::make_shared<CenterPointPeopleNode>());
+  } catch (const std::exception & error) {
+    RCLCPP_FATAL(rclcpp::get_logger("centerpoint_people_node"), "%s", error.what());
+    rclcpp::shutdown();
+    return 1;
+  }
   rclcpp::shutdown();
   return 0;
 }

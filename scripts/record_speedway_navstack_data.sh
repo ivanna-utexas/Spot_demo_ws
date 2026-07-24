@@ -26,6 +26,11 @@ DEFAULT_TOPICS=(
     /cmd_vel
     /joy
     /body_pose  
+    /people_detections
+    /people/map_tracks
+    /nearby_people
+    /people_detections_markers
+    /centerpoint_people/diagnostics
 )
 
 usage() {

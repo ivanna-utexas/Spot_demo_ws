@@ -1,0 +1,15 @@
+[submodule "src/PrefNav"]
+	path = src/PrefNav
+	url = git@github.com:ivanna-utexas/Spot_demo_ws.git
+
+[submodule "src/Lidar_AI_Solution"]
+	path = src/Lidar_AI_Solution
+	url = https://github.com/ut-amrl/CUDA-CenterPoint-People.git
+
+[submodule "src/composable_nav_old/PrefNav"]
+	path = src/composable_nav_old/PrefNav
+	url = git@github.com:ivanna-utexas/Spot_demo_ws.git
+
+[submodule "src/social_nav_costmap_layer"]
+	path = src/social_nav_costmap_layer
+	url = git@github.com:ivanna-utexas/Spot_demo_ws.git

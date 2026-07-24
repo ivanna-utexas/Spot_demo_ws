@@ -15,7 +15,7 @@
   <exec_depend>nav_msgs</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>visualization_msgs</exec_depend>
-  <exec_depend>hdl_people_tracking_msgs</exec_depend>
+  <exec_depend>people_detector</exec_depend>
   <exec_depend>vlm_policy_msgs</exec_depend>
   <exec_depend>prefnav</exec_depend>
 

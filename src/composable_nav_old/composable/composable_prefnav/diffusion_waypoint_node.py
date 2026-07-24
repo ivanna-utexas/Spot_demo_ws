@@ -12,7 +12,8 @@ import rclpy
 import torch
 from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import Point, PoseStamped
-from hdl_people_tracking_msgs.msg import Track, TrackArray
+from people_detector.msg import People as Track
+from people_detector.msg import PeopleArray as TrackArray
 from hydra.core.global_hydra import GlobalHydra
 from nav_msgs.msg import Odometry, Path as PathMsg
 from omegaconf import OmegaConf
@@ -124,7 +125,7 @@ class DiffusionWaypointNode(Node):
         self.declare_parameter("device", "cuda")
         self.declare_parameter("compile", False)
         self.declare_parameter("odom_topic", "odom")
-        self.declare_parameter("tracks_topic", "tracks")
+        self.declare_parameter("tracks_topic", "/people_detections")
         self.declare_parameter("ped_actions_topic", "social_nav/ped_actions")
         self.declare_parameter("waypoints_topic", "prefnav/diffusion_waypoints")
         self.declare_parameter("legacy_diffusion_path_topic", "prefnav/diffusion_path")
@@ -263,7 +264,7 @@ class DiffusionWaypointNode(Node):
 
         dynamic_obs: List[Human] = []
         model_keys: List[str] = []
-        for track in sorted(self.latest_tracks.tracks, key=lambda item: item.id):
+        for track in sorted(self.latest_tracks.people, key=lambda item: item.id):
             local_pos, local_vel = self._track_to_local_state(track)
             future_positions = np.stack(
                 [local_pos + local_vel * self.diffusion_planning_dt * step for step in range(self.max_planning_time)],
@@ -281,7 +282,9 @@ class DiffusionWaypointNode(Node):
         return dynamic_obs, model_keys
 
     def _track_to_local_state(self, track: Track) -> Tuple[np.ndarray, np.ndarray]:
-        local_pose = coordinate_transform(self.start_pose, [track.pos.x, track.pos.y, 0.0])
+        local_pose = coordinate_transform(
+            self.start_pose, [track.position.x, track.position.y, 0.0]
+        )
         theta = -float(self.start_pose[2])
         rotation = np.array(
             [
@@ -290,7 +293,7 @@ class DiffusionWaypointNode(Node):
             ],
             dtype=np.float32,
         )
-        global_vel = np.array([track.vel.x, track.vel.y], dtype=np.float32)
+        global_vel = np.array([track.velocity.x, track.velocity.y], dtype=np.float32)
         local_vel = rotation @ global_vel
         return np.array(local_pose[:2], dtype=np.float32), local_vel
 

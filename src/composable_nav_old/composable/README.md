@@ -5,7 +5,7 @@ ROS 2 wrapper for the PrefNav diffusion waypoint generator.
 ## Inputs
 
 - `odom_topic` (`nav_msgs/msg/Odometry`)
-- `tracks_topic` (`hdl_people_tracking_msgs/msg/TrackArray`)
+- `tracks_topic` (`people_detector/msg/PeopleArray`)
 - `ped_actions_topic` (`vlm_policy_msgs/msg/PedActionArray`, optional)
 
 ## Outputs

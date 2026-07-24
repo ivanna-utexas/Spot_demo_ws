@@ -13,29 +13,21 @@ def generate_launch_description():
     pkg_dir = get_package_share_directory('spot_dog_mode')
     params_file = os.path.join(pkg_dir, 'config', 'params.yaml')
 
-    include_hdl_arg = DeclareLaunchArgument(
-        'include_hdl',
+    include_tracking_arg = DeclareLaunchArgument(
+        'include_tracking',
         default_value='false',
-        description='Also launch hdl_people_tracking (otherwise expect it to run separately)',
+        description='Also launch the canonical CUDA-CenterPoint tracker',
     )
 
-    hdl_launch = IncludeLaunchDescription(
+    tracking_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
-                get_package_share_directory('hdl_people_tracking'),
+                get_package_share_directory('people_detector'),
                 'launch',
-                'hdl_people_tracking.launch.py',
+                'pedestrian_tracking.launch.py',
             )
         ),
-        condition=IfCondition(LaunchConfiguration('include_hdl')),
-    )
-
-    people_adapter = Node(
-        package='people_detector',
-        executable='people_format_adapter_node.py',
-        name='people_format_adapter',
-        output='screen',
-        parameters=[{'enable_ptv3': False}],
+        condition=IfCondition(LaunchConfiguration('include_tracking')),
     )
 
     gaze_controller = Node(
@@ -47,8 +39,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        include_hdl_arg,
-        hdl_launch,
-        people_adapter,
+        include_tracking_arg,
+        tracking_launch,
         gaze_controller,
     ])

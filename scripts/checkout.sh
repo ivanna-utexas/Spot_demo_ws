@@ -23,7 +23,6 @@ function clone_or_pull {
     fi
 }
 
-clone_or_pull master git@github.com:ut-amrl/hdl_people_tracking.git hdl_people_tracking
 clone_or_pull master git@github.com:ut-amrl/human_feedback_app.git human_feedback_app
 clone_or_pull master git@github.com:ut-amrl/ironback_description.git ironback_description
 clone_or_pull master git@github.com:ut-amrl/spot_nav.git spot_nav

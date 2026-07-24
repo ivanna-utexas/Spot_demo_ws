@@ -29,6 +29,9 @@ core.*
 # Logs
 *.log
 *.txt
+# CMake entry points are source despite the .txt suffix.
+!CMakeLists.txt
+!**/CMakeLists.txt
 
 # Data
 data/
@@ -54,7 +57,6 @@ src/lio_sam/
 src/livox_ros_driver2/
 src/spot_ros2/
 src/human_feedback_app/
-src/hdl_people_tracking/
 src/ros2_tracing/
 src/tracetools_analysis/
 src/bond_core/

@@ -3,8 +3,7 @@
 #
 # Records the compressed RGB stream (via the image_transport republish node,
 # since the k4a driver's own /rgb/image_raw/compressed topic publishes nothing)
-# alongside the hdl_people_tracking results, so a session can be replayed with
-# video and tracks side by side.
+# alongside the canonical CenterPoint outputs for replay and evaluation.
 #
 # Usage: ./scripts/record_pedestrian_video.sh [--name NAME] [--with-lidar]
 set -euo pipefail
@@ -32,10 +31,11 @@ BAG_PATH="${WS_ROOT}/${RUN_DIR}"
 TOPICS=(
     /rgb/video/compressed
     /rgb/camera_info
-    /human_points
-    /detection_markers
-    /markers
-    /tracks
+    /people_detections
+    /people/map_tracks
+    /nearby_people
+    /people_detections_markers
+    /centerpoint_people/diagnostics
     /tf
     /tf_static
 )

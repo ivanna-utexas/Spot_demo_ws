@@ -115,6 +115,23 @@ RUN apt-get update && apt-get install -y \
     software-properties-common \
     && rm -rf /var/lib/apt/lists/*
 
+# CUDA-CenterPoint's bundled ONNX parser sources were generated with protobuf
+# 3.21. Keep this ABI-stable toolchain separate from Ubuntu/ROS protobuf.
+ARG PROTOBUF_RELEASE=21.12
+RUN wget -q "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOBUF_RELEASE}/protobuf-all-${PROTOBUF_RELEASE}.tar.gz" \
+      -O /tmp/protobuf.tar.gz && \
+    mkdir -p /tmp/protobuf-src /tmp/protobuf-build && \
+    tar -xzf /tmp/protobuf.tar.gz -C /tmp/protobuf-src --strip-components=1 && \
+    cmake -S /tmp/protobuf-src/cmake -B /tmp/protobuf-build \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX=/opt/protobuf-3.21.12 \
+      -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+      -Dprotobuf_BUILD_TESTS=OFF \
+      -Dprotobuf_BUILD_SHARED_LIBS=OFF && \
+    cmake --build /tmp/protobuf-build --parallel "$(nproc)" && \
+    cmake --install /tmp/protobuf-build && \
+    rm -rf /tmp/protobuf.tar.gz /tmp/protobuf-src /tmp/protobuf-build
+
 # =============================================================================
 # Stage 4: ROS2 Installation
 # =============================================================================
@@ -134,9 +151,12 @@ fi
 RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg && \
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | tee /etc/apt/sources.list.d/ros2.list > /dev/null
 
-# Install Core ROS 2 Humble packages
+# Install the supported ROS desktop set without the simulator metapackages.
+# desktop-full pulls Ignition/Gazebo into the Jetson image even though this
+# robot workspace does not use it, and ARM64 repository syncs can temporarily
+# publish incompatible Ignition component versions.
 RUN apt-get update && apt-get install -y \
-    ros-${ros_distro}-desktop-full \
+    ros-${ros_distro}-desktop \
     ros-${ros_distro}-rmw-cyclonedds-cpp \
     ros-dev-tools \
     && rm -rf /var/lib/apt/lists/*
@@ -254,8 +274,12 @@ RUN apt-get update && apt-get install -y \
     ros-${ros_distro}-robot-localization \
     ros-${ros_distro}-point-cloud-transport \
     ros-${ros_distro}-velodyne \
+    ros-${ros_distro}-velodyne-description \
     ros-${ros_distro}-image-transport \
     ros-${ros_distro}-image-transport-plugins \
+    ros-${ros_distro}-bondpy \
+    ros-${ros_distro}-depth-image-proc \
+    ros-${ros_distro}-xacro \
     ros-${ros_distro}-rosbridge-server \
     ros-${ros_distro}-rosbag2-storage-mcap \
     && rm -rf /var/lib/apt/lists/*

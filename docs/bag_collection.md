@@ -3,16 +3,13 @@
 ## Setup
 
 1. Bring up the demo stack: `cd tmux/auto_dog_mode && tmuxinator local`.
-2. **Verify `/odom` exists and is stamp-matched to the LiDAR** — this is the
-   input `hdl_people_detection` exact-time-syncs against; without it the
-   whole perception chain silently produces nothing (bug class we hit in
-   replay):
+2. **Verify the LiDAR-to-`odom` TF exists at cloud timestamps**. CenterPoint
+   uses it to motion-compensate sweeps and track people globally:
 
    ```bash
    ros2 topic hz /odom            # should tick at ~10 Hz (cloud rate)
    ros2 topic echo /odom --once | head -4
    ros2 topic echo /velodyne_points --once --field header | head -3
-   # header.stamp of /odom messages must exactly match cloud stamps
    ```
 
    If `/odom` is missing live, find/start whatever node provides it before
@@ -37,7 +34,8 @@ ros2 bag record -o test_bags/dogmode_$(date +%m%d)_<scenario_name> \
   /velodyne_points /tf /tf_static \
   /odom /odometry \
   /status/feedback /joy \
-  /people_detections /tracks /clusters \
+  /people_detections /people/map_tracks /nearby_people \
+  /people_detections_markers /centerpoint_people/diagnostics \
   /body_pose /dog_mode/enabled /rosout \
   /rgb/video/compressed /rgb/camera_info
 ```
@@ -46,9 +44,9 @@ Topic groups and why:
 
 | Group | Topics | Purpose |
 |---|---|---|
-| Replay inputs (essential) | `/velodyne_points /tf /tf_static /odom` | Everything a replay feeds the perception chain. `/odom` must be recorded natively — see the known limitation in [dog_mode_manual_testing.md](dog_mode_manual_testing.md) (hdl exact-time-syncs it with the clouds). |
+| Replay inputs (essential) | `/velodyne_points /tf /tf_static /odom` | Inputs needed for sweep motion compensation and frame transforms. |
 | Robot state | `/status/feedback /joy /odometry` | Real standing/moving/deadman gating — replaying the bag's feedback (instead of faking "standing") tests the gates against reality. |
-| Live perception outputs | `/people_detections /tracks /clusters` | Ground truth to diff against re-run perception offline (detects hdl config drift). |
+| Live perception outputs | `/people_detections /people/map_tracks /nearby_people /people_detections_markers /centerpoint_people/diagnostics` | Canonical contracts and runtime evidence to compare with offline replay. |
 | Live behavior outputs | `/body_pose /dog_mode/enabled /rosout` | What the controller actually commanded on-robot + its state-transition logs — the golden reference to compare sim/replay against, and the record of how it *felt* vs what it *did*. |
 | Reference video | `/rgb/video/compressed /rgb/camera_info` | Kinect RGB (JPEG, 720p30) — human-viewable ground truth of what people actually did in each scenario, for labeling and for settling "was that a real miss?" disputes during replay analysis. |
 
@@ -61,7 +59,7 @@ gates
 
 1. **`baseline_empty`** (2 min) — nobody within ~8 m. False-positive check:
    replay must produce zero greets. Also captures the lab's static clutter
-   for background-subtraction sanity.
+   for false-positive and tracker-ghost checks.
 2. **`single_approach`** (3 min) — one person approaches from ~8 m head-on,
    stops at ~2 m for 10 s, backs away. Repeat 3–4 times, including one
    approach from the side and one from behind. Core greet→track→relax data.
